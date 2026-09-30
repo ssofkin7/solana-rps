@@ -27,7 +27,9 @@ without an independent audit.
 | The admin changes the fee or treasury to take more from a live game | `create_game` copies `fee_bps`, `treasury`, and `reveal_timeout` into the game. Settlement reads only the copies. |
 | The admin pauses to trap funds | Pause blocks only `create_game` and `join_game`. `reveal`, `cancel_game`, and `claim_forfeit` never check the flag. |
 | The admin withdraws player funds | No admin instruction accepts a game account. The fee is capped at 1000 bps. |
-| The treasury wallet plays, so `reveal` fails on a duplicate account and the treasury wins by forfeit | The treasury is refused at `create_game` and `join_game`. |
+| The creator sees a join coming, cancels, and recreates the game at the same address with a different move | `join_game` takes `expected_commitment` and fails unless it equals the game's commitment, so a join only ever lands on the game the opponent saw. |
+| The treasury is set to an address that can never be credited (a sysvar or a program id), so every `reveal` fails and every creator is pushed into forfeit | The treasury must be passed as a writable, system-owned account whenever it is set, in `initialize_config` and `update_config`. |
+| The fee wallet wagers on games it collects fees from | Policy, not a safety check: the treasury is refused at `create_game` and `join_game`. |
 | An empty treasury makes small reveals fail, forcing forfeits | If the fee would leave the treasury below the rent-exempt minimum, the fee is waived and the winner receives the whole pot. |
 | Dust stakes that cannot be refunded into an empty wallet | `min_stake` cannot be configured below 1,000,000 lamports. |
 | Arithmetic overflow with unbounded stakes | All arithmetic is checked. The fee is computed in u128. The release profile also enables overflow checks. |
@@ -40,12 +42,15 @@ without an independent audit.
 - `config` is created at PDA `["config"]`; a second call fails because it exists.
 - `program` is this program, and its ProgramData address must equal `program_data`.
 - `program_data.upgrade_authority_address` must equal `authority`.
-- Treasury is not the default key; fee is at most 1000 bps; minimum stake is at
-  least 1,000,000 lamports; timeout is 60 to 86,400 seconds.
+- `treasury` is a writable, system-owned account.
+- Fee is at most 1000 bps; minimum stake is at least 1,000,000 lamports; timeout
+  is 60 to 86,400 seconds.
 
 ### update_config and set_paused
 - `admin` signs; `config` is the `["config"]` PDA with `has_one = admin`.
 - `update_config` re-runs every range check on the resulting values.
+- A new treasury is passed as an optional account and must be writable and
+  system-owned. Leaving it out keeps the current treasury.
 - Neither takes a game account.
 
 ### create_game
@@ -60,7 +65,8 @@ without an independent audit.
 - `opponent` signs.
 - `config` and `game` are PDAs checked by seeds and stored bump; not paused.
 - Status is `Open`; the move is 0, 1, or 2; the opponent is neither the creator
-  nor the game's treasury; `expected_stake` equals the game's stake.
+  nor the game's treasury; `expected_stake` equals the game's stake and
+  `expected_commitment` equals the game's commitment.
 - The stake moves in through a system-program transfer signed by the opponent,
   and the instruction fails as a whole if that transfer fails.
 
@@ -83,12 +89,24 @@ without an independent audit.
 
 - No `unwrap`, `expect`, or `panic!` in program code outside unit tests.
 - All arithmetic uses `checked_*` operations.
-- 64 tests cover every instruction, including all nine move combinations,
+- 70 tests cover every instruction, including all nine move combinations,
   wrong salt and move, every out-of-order action, non-player attempts, the
   paused state, fee rounding, and rent return. Run them with `cargo test -p rps`.
 
 ## Known limits
 
+- **An open game can be joined while its creator is away.** Once someone joins,
+  the creator has the reveal timeout (10 minutes by default) to reveal. A
+  creator who leaves a game open and walks away can lose the stake by forfeit
+  even with the winning move. Cancel a game before leaving it unattended.
+- **A forfeit pays no fee.** A creator who has lost gains nothing by stalling,
+  but the opponent then waits out the timeout and the buyback wallet earns
+  nothing from that game.
+- **Terms are fixed when the game is created.** The fee and timeout a creator
+  gets are whatever the config holds when their transaction lands. The fee can
+  never exceed 10% and the timeout can never be under 60 seconds.
+- **Small fees into an empty treasury are waived.** Keep the treasury funded
+  with at least 0.001 SOL so every fee is collected.
 - **Losing the salt means losing the stake.** The program cannot tell a lost salt
   from a refusal to reveal. The frontend forces a backup download for this reason.
 - **The opponent's move is public.** That is safe because the creator's move is

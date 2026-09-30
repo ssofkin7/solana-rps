@@ -137,10 +137,8 @@ fn only_the_opponent_can_claim() {
         ),
         &[&created.creator],
     );
-    assert!(
-        result.is_err(),
-        "the creator cannot claim their own forfeit"
-    );
+    // The creator cannot claim their own forfeit.
+    assert_rps_err(result, RpsError::Unauthorized);
     assert!(game_exists(&env, &created.game));
 }
 
@@ -165,13 +163,15 @@ fn the_rent_cannot_be_redirected_away_from_the_creator() {
     let created = create(&mut env, 0, SOL);
     let opponent = join(&mut env, &created, 1);
     advance_clock(&mut env, DEFAULT_TIMEOUT);
+    let accomplice = funded(&mut env, SOL);
     let result = send(
         &mut env,
-        ix_claim_forfeit(&opponent.pubkey(), &created.game, &opponent.pubkey()),
+        ix_claim_forfeit(&opponent.pubkey(), &created.game, &accomplice.pubkey()),
         &[&opponent],
     );
-    assert!(result.is_err());
+    assert_rps_err(result, RpsError::Unauthorized);
     assert!(game_exists(&env, &created.game));
+    assert_eq!(balance(&env, &accomplice.pubkey()), SOL);
 }
 
 #[test]

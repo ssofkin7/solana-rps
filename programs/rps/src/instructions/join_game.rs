@@ -27,7 +27,12 @@ pub struct JoinGame<'info> {
 }
 
 impl<'info> JoinGame<'info> {
-    pub fn handle(&mut self, mv: u8, expected_stake: u64) -> Result<()> {
+    pub fn handle(
+        &mut self,
+        mv: u8,
+        expected_stake: u64,
+        expected_commitment: [u8; 32],
+    ) -> Result<()> {
         require!(!self.config.paused, RpsError::Paused);
         require!(
             self.game.status == GameStatus::Open,
@@ -45,6 +50,13 @@ impl<'info> JoinGame<'info> {
             RpsError::TreasuryCannotPlay
         );
         require!(expected_stake == self.game.stake, RpsError::StakeMismatch);
+        // The game address can be reused after a cancel, so the stake alone does
+        // not identify the game the opponent saw. Binding the commitment stops a
+        // creator swapping their move under a join that is already in flight.
+        require!(
+            expected_commitment == self.game.commitment,
+            RpsError::GameChanged
+        );
 
         system_program::transfer(
             CpiContext::new(

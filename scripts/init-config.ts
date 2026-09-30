@@ -72,7 +72,6 @@ if ((await connection.getBalance(treasury)) < TREASURY_FLOAT_LAMPORTS) {
 
 const signature = await program.methods
   .initializeConfig({
-    treasury,
     feeBps: FEE_BPS,
     minStake: new anchor.BN(MIN_STAKE_LAMPORTS),
     revealTimeout: new anchor.BN(REVEAL_TIMEOUT_SECONDS),
@@ -82,6 +81,7 @@ const signature = await program.methods
     config,
     program: program.programId,
     programData,
+    treasury,
     systemProgram: SystemProgram.programId,
   })
   .rpc();

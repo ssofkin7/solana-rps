@@ -109,8 +109,27 @@ pub fn boot() -> (Env, Keypair) {
     (env, admin)
 }
 
-pub fn default_params(treasury: Pubkey) -> ConfigParams {
-    ConfigParams {
+/// Test-side view of `initialize_config`: the treasury travels as an account,
+/// the rest as instruction arguments.
+pub struct InitParams {
+    pub treasury: Pubkey,
+    pub fee_bps: u16,
+    pub min_stake: u64,
+    pub reveal_timeout: i64,
+}
+
+/// Test-side view of `update_config`: a new treasury travels as an optional
+/// account, the rest as instruction arguments.
+pub struct Update {
+    pub admin: Option<Pubkey>,
+    pub treasury: Option<Pubkey>,
+    pub fee_bps: Option<u16>,
+    pub min_stake: Option<u64>,
+    pub reveal_timeout: Option<i64>,
+}
+
+pub fn default_params(treasury: Pubkey) -> InitParams {
+    InitParams {
         treasury,
         fee_bps: DEFAULT_FEE_BPS,
         min_stake: DEFAULT_MIN_STAKE,
@@ -136,14 +155,27 @@ pub fn setup() -> (Env, Keypair) {
 /// only through the game. The blockhash is expired first so two identical
 /// instructions are two distinct transactions.
 pub fn send(env: &mut Env, ix: Instruction, signers: &[&Keypair]) -> TxResult {
-    env.svm.expire_blockhash();
-    let blockhash = env.svm.latest_blockhash();
-    let message = Message::new_with_blockhash(&[ix], Some(&env.payer.pubkey()), &blockhash);
-    let mut all: Vec<&Keypair> = vec![&env.payer];
-    all.extend_from_slice(signers);
-    let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(message), &all).unwrap();
-    env.svm.send_transaction(tx)
+    send_many(env, &[ix], signers)
 }
+
+/// For failures raised by Anchor's own account checks rather than by `RpsError`.
+pub fn assert_anchor_err(result: TxResult, accepted_codes: &[u32]) {
+    let failed = result.expect_err("transaction should have failed");
+    let shown = format!("{:?}", failed.err);
+    assert!(
+        accepted_codes
+            .iter()
+            .any(|code| shown.contains(&format!("Custom({code})"))),
+        "expected one of {accepted_codes:?}, got {shown}\n{}",
+        failed.meta.pretty_logs()
+    );
+}
+
+// Anchor's built-in error codes used by these tests.
+pub const ANCHOR_CONSTRAINT_MUT: u32 = 2000;
+pub const ANCHOR_ACCOUNT_OWNED_BY_WRONG_PROGRAM: u32 = 3007;
+pub const ANCHOR_ACCOUNT_NOT_SYSTEM_OWNED: u32 = 3011;
+pub const ANCHOR_ACCOUNT_NOT_INITIALIZED: u32 = 3012;
 
 pub fn assert_rps_err(result: TxResult, expected: RpsError) {
     let code: u32 = expected.into();
@@ -161,8 +193,8 @@ pub fn read_config(env: &Env) -> Config {
     Config::try_deserialize(&mut account.data.as_slice()).unwrap()
 }
 
-pub fn no_update() -> UpdateConfigParams {
-    UpdateConfigParams {
+pub fn no_update() -> Update {
+    Update {
         admin: None,
         treasury: None,
         fee_bps: None,
@@ -171,28 +203,45 @@ pub fn no_update() -> UpdateConfigParams {
     }
 }
 
-pub fn ix_initialize_config(authority: &Pubkey, params: ConfigParams) -> Instruction {
+pub fn ix_initialize_config(authority: &Pubkey, params: InitParams) -> Instruction {
     Instruction::new_with_bytes(
         rps::ID,
-        &rps::instruction::InitializeConfig { params }.data(),
+        &rps::instruction::InitializeConfig {
+            params: ConfigParams {
+                fee_bps: params.fee_bps,
+                min_stake: params.min_stake,
+                reveal_timeout: params.reveal_timeout,
+            },
+        }
+        .data(),
         rps::accounts::InitializeConfig {
             authority: *authority,
             config: config_address(),
             program: rps::ID,
             program_data: program_data_address(),
+            treasury: params.treasury,
             system_program: system_program::ID,
         }
         .to_account_metas(None),
     )
 }
 
-pub fn ix_update_config(admin: &Pubkey, params: UpdateConfigParams) -> Instruction {
+pub fn ix_update_config(admin: &Pubkey, update: Update) -> Instruction {
     Instruction::new_with_bytes(
         rps::ID,
-        &rps::instruction::UpdateConfig { params }.data(),
-        rps::accounts::AdminOnly {
+        &rps::instruction::UpdateConfig {
+            params: UpdateConfigParams {
+                admin: update.admin,
+                fee_bps: update.fee_bps,
+                min_stake: update.min_stake,
+                reveal_timeout: update.reveal_timeout,
+            },
+        }
+        .data(),
+        rps::accounts::UpdateConfig {
             admin: *admin,
             config: config_address(),
+            new_treasury: update.treasury,
         }
         .to_account_metas(None),
     )
@@ -202,7 +251,7 @@ pub fn ix_set_paused(admin: &Pubkey, paused: bool) -> Instruction {
     Instruction::new_with_bytes(
         rps::ID,
         &rps::instruction::SetPaused { paused }.data(),
-        rps::accounts::AdminOnly {
+        rps::accounts::SetPaused {
             admin: *admin,
             config: config_address(),
         }
@@ -279,6 +328,7 @@ pub struct Created {
     pub game: Pubkey,
     pub mv: u8,
     pub salt: [u8; 32],
+    pub commitment: [u8; 32],
     pub stake: u64,
 }
 
@@ -301,14 +351,26 @@ pub fn create(env: &mut Env, mv: u8, stake: u64) -> Created {
         game,
         mv,
         salt,
+        commitment,
         stake,
     }
 }
 
-pub fn ix_join_game(opponent: &Pubkey, game: &Pubkey, mv: u8, expected_stake: u64) -> Instruction {
+pub fn ix_join_game(
+    opponent: &Pubkey,
+    game: &Pubkey,
+    mv: u8,
+    expected_stake: u64,
+    expected_commitment: [u8; 32],
+) -> Instruction {
     Instruction::new_with_bytes(
         rps::ID,
-        &rps::instruction::JoinGame { mv, expected_stake }.data(),
+        &rps::instruction::JoinGame {
+            mv,
+            expected_stake,
+            expected_commitment,
+        }
+        .data(),
         rps::accounts::JoinGame {
             opponent: *opponent,
             config: config_address(),
@@ -324,7 +386,13 @@ pub fn join(env: &mut Env, created: &Created, mv: u8) -> Keypair {
     let opponent = funded(env, created.stake.checked_add(SOL).unwrap());
     send(
         env,
-        ix_join_game(&opponent.pubkey(), &created.game, mv, created.stake),
+        ix_join_game(
+            &opponent.pubkey(),
+            &created.game,
+            mv,
+            created.stake,
+            created.commitment,
+        ),
         &[&opponent],
     )
     .unwrap();
@@ -392,4 +460,15 @@ pub fn ix_claim_forfeit(opponent: &Pubkey, game: &Pubkey, creator: &Pubkey) -> I
         }
         .to_account_metas(None),
     )
+}
+
+/// Several instructions in one atomic transaction.
+pub fn send_many(env: &mut Env, ixs: &[Instruction], signers: &[&Keypair]) -> TxResult {
+    env.svm.expire_blockhash();
+    let blockhash = env.svm.latest_blockhash();
+    let message = Message::new_with_blockhash(ixs, Some(&env.payer.pubkey()), &blockhash);
+    let mut all: Vec<&Keypair> = vec![&env.payer];
+    all.extend_from_slice(signers);
+    let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(message), &all).unwrap();
+    env.svm.send_transaction(tx)
 }

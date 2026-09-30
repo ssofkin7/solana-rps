@@ -20,12 +20,12 @@ pub mod rps {
         ctx.accounts.handle(params, bump)
     }
 
-    pub fn update_config(ctx: Context<AdminOnly>, params: UpdateConfigParams) -> Result<()> {
-        ctx.accounts.update_config(params)
+    pub fn update_config(ctx: Context<UpdateConfig>, params: UpdateConfigParams) -> Result<()> {
+        ctx.accounts.handle(params)
     }
 
-    pub fn set_paused(ctx: Context<AdminOnly>, paused: bool) -> Result<()> {
-        ctx.accounts.set_paused(paused)
+    pub fn set_paused(ctx: Context<SetPaused>, paused: bool) -> Result<()> {
+        ctx.accounts.handle(paused)
     }
 
     pub fn create_game(
@@ -42,8 +42,13 @@ pub mod rps {
         ctx.accounts.handle()
     }
 
-    pub fn join_game(ctx: Context<JoinGame>, mv: u8, expected_stake: u64) -> Result<()> {
-        ctx.accounts.handle(mv, expected_stake)
+    pub fn join_game(
+        ctx: Context<JoinGame>,
+        mv: u8,
+        expected_stake: u64,
+        expected_commitment: [u8; 32],
+    ) -> Result<()> {
+        ctx.accounts.handle(mv, expected_stake, expected_commitment)
     }
 
     pub fn reveal(ctx: Context<Reveal>, mv: u8, salt: [u8; 32]) -> Result<()> {

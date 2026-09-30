@@ -5,16 +5,16 @@ use crate::{constants::CONFIG_SEED, errors::RpsError, state::Config};
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct UpdateConfigParams {
     pub admin: Option<Pubkey>,
-    pub treasury: Option<Pubkey>,
     pub fee_bps: Option<u16>,
     pub min_stake: Option<u64>,
     pub reveal_timeout: Option<i64>,
 }
 
-/// Neither admin instruction takes a game account, so the admin has no path
-/// to player funds.
+// No admin instruction takes a game account, so the admin has no path to
+// player funds.
+
 #[derive(Accounts)]
-pub struct AdminOnly<'info> {
+pub struct UpdateConfig<'info> {
     pub admin: Signer<'info>,
     #[account(
         mut,
@@ -23,12 +23,19 @@ pub struct AdminOnly<'info> {
         has_one = admin @ RpsError::Unauthorized
     )]
     pub config: Account<'info, Config>,
+    /// Pass this to change the fee wallet. It must be a system-owned account
+    /// that can be write-locked, for the same reason as in `initialize_config`.
+    #[account(mut)]
+    pub new_treasury: Option<SystemAccount<'info>>,
 }
 
-impl<'info> AdminOnly<'info> {
-    pub fn update_config(&mut self, params: UpdateConfigParams) -> Result<()> {
+impl<'info> UpdateConfig<'info> {
+    pub fn handle(&mut self, params: UpdateConfigParams) -> Result<()> {
         let config = &mut self.config;
-        let treasury = params.treasury.unwrap_or(config.treasury);
+        let treasury = match &self.new_treasury {
+            Some(account) => account.key(),
+            None => config.treasury,
+        };
         let fee_bps = params.fee_bps.unwrap_or(config.fee_bps);
         let min_stake = params.min_stake.unwrap_or(config.min_stake);
         let reveal_timeout = params.reveal_timeout.unwrap_or(config.reveal_timeout);
@@ -44,8 +51,22 @@ impl<'info> AdminOnly<'info> {
         config.reveal_timeout = reveal_timeout;
         Ok(())
     }
+}
 
-    pub fn set_paused(&mut self, paused: bool) -> Result<()> {
+#[derive(Accounts)]
+pub struct SetPaused<'info> {
+    pub admin: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [CONFIG_SEED],
+        bump = config.bump,
+        has_one = admin @ RpsError::Unauthorized
+    )]
+    pub config: Account<'info, Config>,
+}
+
+impl<'info> SetPaused<'info> {
+    pub fn handle(&mut self, paused: bool) -> Result<()> {
         self.config.paused = paused;
         Ok(())
     }

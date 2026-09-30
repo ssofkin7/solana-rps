@@ -34,7 +34,13 @@ fn join_with_the_wrong_expected_stake_is_rejected() {
     for wrong in [SOL - 1, SOL + 1, 0] {
         let result = send(
             &mut env,
-            ix_join_game(&opponent.pubkey(), &created.game, 1, wrong),
+            ix_join_game(
+                &opponent.pubkey(),
+                &created.game,
+                1,
+                wrong,
+                created.commitment,
+            ),
             &[&opponent],
         );
         assert_rps_err(result, RpsError::StakeMismatch);
@@ -50,7 +56,13 @@ fn join_with_an_invalid_move_is_rejected() {
     for bad in [3u8, 4, 255] {
         let result = send(
             &mut env,
-            ix_join_game(&opponent.pubkey(), &created.game, bad, SOL),
+            ix_join_game(
+                &opponent.pubkey(),
+                &created.game,
+                bad,
+                SOL,
+                created.commitment,
+            ),
             &[&opponent],
         );
         assert_rps_err(result, RpsError::InvalidMove);
@@ -65,14 +77,14 @@ fn a_second_join_is_rejected() {
     let second = funded(&mut env, 5 * SOL);
     let result = send(
         &mut env,
-        ix_join_game(&second.pubkey(), &created.game, 2, SOL),
+        ix_join_game(&second.pubkey(), &created.game, 2, SOL, created.commitment),
         &[&second],
     );
     assert_rps_err(result, RpsError::InvalidGameState);
 
     let again = send(
         &mut env,
-        ix_join_game(&first.pubkey(), &created.game, 1, SOL),
+        ix_join_game(&first.pubkey(), &created.game, 1, SOL, created.commitment),
         &[&first],
     );
     assert_rps_err(again, RpsError::InvalidGameState);
@@ -93,6 +105,7 @@ fn the_creator_cannot_join_their_own_game() {
             &created.game,
             1,
             DEFAULT_MIN_STAKE,
+            created.commitment,
         ),
         &[&created.creator],
     );
@@ -118,7 +131,13 @@ fn the_treasury_wallet_cannot_join_a_game() {
 
     let result = send(
         &mut env,
-        ix_join_game(&treasury.pubkey(), &created.game, 1, DEFAULT_MIN_STAKE),
+        ix_join_game(
+            &treasury.pubkey(),
+            &created.game,
+            1,
+            DEFAULT_MIN_STAKE,
+            created.commitment,
+        ),
         &[&treasury],
     );
     assert_rps_err(result, RpsError::TreasuryCannotPlay);
@@ -132,7 +151,13 @@ fn join_is_refused_while_paused() {
     let opponent = funded(&mut env, 5 * SOL);
     let result = send(
         &mut env,
-        ix_join_game(&opponent.pubkey(), &created.game, 1, SOL),
+        ix_join_game(
+            &opponent.pubkey(),
+            &created.game,
+            1,
+            SOL,
+            created.commitment,
+        ),
         &[&opponent],
     );
     assert_rps_err(result, RpsError::Paused);
@@ -165,9 +190,66 @@ fn joining_a_cancelled_game_fails() {
     let opponent = funded(&mut env, 5 * SOL);
     let result = send(
         &mut env,
-        ix_join_game(&opponent.pubkey(), &created.game, 1, SOL),
+        ix_join_game(
+            &opponent.pubkey(),
+            &created.game,
+            1,
+            SOL,
+            created.commitment,
+        ),
         &[&opponent],
     );
     assert!(result.is_err());
+    assert_eq!(balance(&env, &opponent.pubkey()), 5 * SOL);
+}
+
+#[test]
+fn a_creator_cannot_swap_the_commitment_under_a_pending_join() {
+    let (mut env, _admin) = setup();
+    let created = create(&mut env, 0, SOL); // committed to rock
+
+    // The opponent answers rock with paper, against the game as they saw it.
+    let opponent = funded(&mut env, 5 * SOL);
+    let stale_join = ix_join_game(
+        &opponent.pubkey(),
+        &created.game,
+        1,
+        SOL,
+        created.commitment,
+    );
+
+    // Before that join lands, the creator cancels and recreates the same game
+    // id in one transaction, now committed to scissors.
+    let swapped = commit(2, &created.salt, &created.creator.pubkey());
+    send_many(
+        &mut env,
+        &[
+            ix_cancel_game(&created.creator.pubkey(), &created.game),
+            ix_create_game(&created.creator.pubkey(), created.game_id, SOL, swapped),
+        ],
+        &[&created.creator],
+    )
+    .unwrap();
+
+    let result = send(&mut env, stale_join, &[&opponent]);
+    assert_rps_err(result, RpsError::GameChanged);
+    assert_eq!(balance(&env, &opponent.pubkey()), 5 * SOL);
+    assert_eq!(
+        read_game(&env, &created.game).unwrap().status,
+        GameStatus::Open
+    );
+}
+
+#[test]
+fn join_with_the_wrong_expected_commitment_is_rejected() {
+    let (mut env, _admin) = setup();
+    let created = create(&mut env, 0, SOL);
+    let opponent = funded(&mut env, 5 * SOL);
+    let result = send(
+        &mut env,
+        ix_join_game(&opponent.pubkey(), &created.game, 1, SOL, [0u8; 32]),
+        &[&opponent],
+    );
+    assert_rps_err(result, RpsError::GameChanged);
     assert_eq!(balance(&env, &opponent.pubkey()), 5 * SOL);
 }

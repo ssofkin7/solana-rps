@@ -122,7 +122,7 @@ fn an_invalid_move_value_is_rejected_on_reveal() {
     let opponent = funded(&mut env, 2 * SOL);
     send(
         &mut env,
-        ix_join_game(&opponent.pubkey(), &game, 0, SOL),
+        ix_join_game(&opponent.pubkey(), &game, 0, SOL, commitment),
         &[&opponent],
     )
     .unwrap();
@@ -160,7 +160,13 @@ fn a_commitment_copied_from_another_creator_cannot_be_revealed() {
     let opponent = funded(&mut env, 2 * SOL);
     send(
         &mut env,
-        ix_join_game(&opponent.pubkey(), &copied_game, 0, SOL),
+        ix_join_game(
+            &opponent.pubkey(),
+            &copied_game,
+            0,
+            SOL,
+            original_commitment,
+        ),
         &[&opponent],
     )
     .unwrap();
@@ -237,9 +243,33 @@ fn only_the_creator_can_reveal() {
             ),
             &[impostor],
         );
-        assert!(result.is_err());
+        assert_rps_err(result, RpsError::Unauthorized);
     }
     assert!(game_exists(&env, &created.game));
+}
+
+#[test]
+fn reveal_after_a_cancel_fails() {
+    let (mut env, _admin) = setup();
+    let created = create(&mut env, 0, SOL);
+    send(
+        &mut env,
+        ix_cancel_game(&created.creator.pubkey(), &created.game),
+        &[&created.creator],
+    )
+    .unwrap();
+    let creator_after = balance(&env, &created.creator.pubkey());
+
+    let nobody = Pubkey::new_unique();
+    let result = reveal(&mut env, &created, &nobody);
+    assert_anchor_err(
+        result,
+        &[
+            ANCHOR_ACCOUNT_NOT_INITIALIZED,
+            ANCHOR_ACCOUNT_OWNED_BY_WRONG_PROGRAM,
+        ],
+    );
+    assert_eq!(balance(&env, &created.creator.pubkey()), creator_after);
 }
 
 #[test]
@@ -399,7 +429,13 @@ fn an_opponent_with_a_zero_balance_is_still_settled() {
     let opponent = funded(&mut env, SOL);
     send(
         &mut env,
-        ix_join_game(&opponent.pubkey(), &created.game, 0, SOL),
+        ix_join_game(
+            &opponent.pubkey(),
+            &created.game,
+            0,
+            SOL,
+            created.commitment,
+        ),
         &[&opponent],
     )
     .unwrap();
@@ -413,7 +449,13 @@ fn an_opponent_with_a_zero_balance_is_still_settled() {
     let opponent = funded(&mut env, SOL);
     send(
         &mut env,
-        ix_join_game(&opponent.pubkey(), &created.game, 0, SOL),
+        ix_join_game(
+            &opponent.pubkey(),
+            &created.game,
+            0,
+            SOL,
+            created.commitment,
+        ),
         &[&opponent],
     )
     .unwrap();
@@ -449,10 +491,19 @@ fn a_stake_too_large_to_double_cannot_be_joined_and_can_be_cancelled() {
     let opponent = funded(&mut env, stake + SOL);
     let result = send(
         &mut env,
-        ix_join_game(&opponent.pubkey(), &created.game, 1, stake),
+        ix_join_game(
+            &opponent.pubkey(),
+            &created.game,
+            1,
+            stake,
+            created.commitment,
+        ),
         &[&opponent],
     );
-    assert!(result.is_err());
+    // The pot cannot fit in u64, so the stake transfer itself is refused.
+    let failed = result.expect_err("join should have failed");
+    let shown = format!("{:?}", failed.err);
+    assert!(shown.contains("ArithmeticOverflow"), "got {shown}");
     assert_eq!(balance(&env, &opponent.pubkey()), stake + SOL);
 
     send(

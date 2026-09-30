@@ -32,4 +32,6 @@ pub enum RpsError {
     MinStakeTooLow,
     #[msg("Arithmetic overflow")]
     MathOverflow,
+    #[msg("The game changed since you loaded it. Refresh and try again")]
+    GameChanged,
 }

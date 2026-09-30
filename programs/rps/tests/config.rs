@@ -175,3 +175,64 @@ fn admin_pauses_and_unpauses() {
     send(&mut env, ix_set_paused(&admin.pubkey(), false), &[&admin]).unwrap();
     assert!(!read_config(&env).paused);
 }
+
+#[test]
+fn a_treasury_that_cannot_be_credited_is_rejected_on_update() {
+    use anchor_lang::solana_program::sysvar::SysvarId;
+    // A sysvar and a program id can never be write-locked, so `reveal` could
+    // never pay them and every creator would be pushed into forfeit.
+    // (This program's own id is not in the list: Anchor reads it in an
+    // optional account slot as "no account", which leaves the treasury as is.)
+    for bad_treasury in [
+        anchor_lang::prelude::Clock::id(),
+        anchor_lang::solana_program::system_program::ID,
+        anchor_lang::solana_program::bpf_loader_upgradeable::ID,
+    ] {
+        let (mut env, admin) = setup();
+        let mut params = no_update();
+        params.treasury = Some(bad_treasury);
+        let result = send(
+            &mut env,
+            ix_update_config(&admin.pubkey(), params),
+            &[&admin],
+        );
+        assert_anchor_err(
+            result,
+            &[ANCHOR_ACCOUNT_NOT_SYSTEM_OWNED, ANCHOR_CONSTRAINT_MUT],
+        );
+        assert_eq!(read_config(&env).treasury, env.treasury);
+    }
+}
+
+#[test]
+fn a_treasury_that_cannot_be_credited_is_rejected_on_initialize() {
+    use anchor_lang::solana_program::sysvar::SysvarId;
+    for bad_treasury in [anchor_lang::prelude::Clock::id(), rps::ID] {
+        let (mut env, admin) = boot();
+        let result = send(
+            &mut env,
+            ix_initialize_config(&admin.pubkey(), default_params(bad_treasury)),
+            &[&admin],
+        );
+        assert_anchor_err(
+            result,
+            &[ANCHOR_ACCOUNT_NOT_SYSTEM_OWNED, ANCHOR_CONSTRAINT_MUT],
+        );
+    }
+}
+
+#[test]
+fn an_update_without_a_new_treasury_keeps_the_current_one() {
+    let (mut env, admin) = setup();
+    let mut params = no_update();
+    params.fee_bps = Some(100);
+    send(
+        &mut env,
+        ix_update_config(&admin.pubkey(), params),
+        &[&admin],
+    )
+    .unwrap();
+    let config = read_config(&env);
+    assert_eq!(config.treasury, env.treasury);
+    assert_eq!(config.fee_bps, 100);
+}
