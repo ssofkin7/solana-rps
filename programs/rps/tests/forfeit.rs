@@ -137,7 +137,10 @@ fn only_the_opponent_can_claim() {
         ),
         &[&created.creator],
     );
-    assert!(result.is_err(), "the creator cannot claim their own forfeit");
+    assert!(
+        result.is_err(),
+        "the creator cannot claim their own forfeit"
+    );
     assert!(game_exists(&env, &created.game));
 }
 
@@ -177,7 +180,12 @@ fn a_timeout_change_does_not_shorten_a_live_game() {
     let created = create(&mut env, 0, SOL);
     let mut params = no_update();
     params.reveal_timeout = Some(60);
-    send(&mut env, ix_update_config(&admin.pubkey(), params), &[&admin]).unwrap();
+    send(
+        &mut env,
+        ix_update_config(&admin.pubkey(), params),
+        &[&admin],
+    )
+    .unwrap();
 
     let opponent = join(&mut env, &created, 1);
     let ix = ix_claim_forfeit(&opponent.pubkey(), &created.game, &created.creator.pubkey());

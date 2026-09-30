@@ -1,0 +1,106 @@
+# Security
+
+Solana RPS is a wagered Rock-Paper-Scissors program. It runs on **devnet only**.
+It has not been audited. Do not deploy it to mainnet or use it with real funds
+without an independent audit.
+
+## What the program protects
+
+- **Stakes.** Every lamport a player puts in leaves only by one of five paths:
+  win, tie refund, cancel refund, forfeit payout, or the fee.
+- **The hidden move.** The creator's move stays secret until they reveal it.
+- **Fair terms.** The fee, treasury, and timeout a game was created under cannot
+  change while it is in progress.
+
+## Threat model
+
+| Threat | Defence |
+|---|---|
+| A player copies another creator's commitment into their own game | The commitment is `sha256(move \|\| salt \|\| creator_pubkey)`. A copied commitment can never be revealed by a different creator. |
+| The opponent guesses the creator's move from the commitment | The salt is 32 random bytes generated in the browser, so the three possible moves cannot be brute-forced. |
+| The creator changes their move after seeing the opponent's | `reveal` recomputes the hash and rejects any move or salt that does not match. |
+| The creator refuses to reveal a losing move | After the reveal timeout the opponent claims the whole pot with `claim_forfeit`. |
+| Replaying an action: double join, double reveal, cancel after join, cancel or forfeit after settlement | Every instruction checks the game status, and every settlement closes the game account in the same instruction, so a second action finds no account. |
+| Passing a fake account: another wallet as opponent, treasury, or creator | `has_one` constraints pin each account to the key stored in the game. The game and config are PDAs checked by seeds and bump. |
+| A forged game or config account | Anchor checks the owner program and the 8-byte discriminator on every typed account. |
+| Someone else initializes the config right after deploy | `initialize_config` requires the signer to be the program's upgrade authority, read from the ProgramData account. |
+| The admin changes the fee or treasury to take more from a live game | `create_game` copies `fee_bps`, `treasury`, and `reveal_timeout` into the game. Settlement reads only the copies. |
+| The admin pauses to trap funds | Pause blocks only `create_game` and `join_game`. `reveal`, `cancel_game`, and `claim_forfeit` never check the flag. |
+| The admin withdraws player funds | No admin instruction accepts a game account. The fee is capped at 1000 bps. |
+| The treasury wallet plays, so `reveal` fails on a duplicate account and the treasury wins by forfeit | The treasury is refused at `create_game` and `join_game`. |
+| An empty treasury makes small reveals fail, forcing forfeits | If the fee would leave the treasury below the rent-exempt minimum, the fee is waived and the winner receives the whole pot. |
+| Dust stakes that cannot be refunded into an empty wallet | `min_stake` cannot be configured below 1,000,000 lamports. |
+| Arithmetic overflow with unbounded stakes | All arithmetic is checked. The fee is computed in u128. The release profile also enables overflow checks. |
+| The opponent wagers a different amount than they were shown | `join_game` takes `expected_stake` and fails unless it equals the game's stake. |
+
+## Checks by instruction
+
+### initialize_config
+- `authority` signs and pays.
+- `config` is created at PDA `["config"]`; a second call fails because it exists.
+- `program` is this program, and its ProgramData address must equal `program_data`.
+- `program_data.upgrade_authority_address` must equal `authority`.
+- Treasury is not the default key; fee is at most 1000 bps; minimum stake is at
+  least 1,000,000 lamports; timeout is 60 to 86,400 seconds.
+
+### update_config and set_paused
+- `admin` signs; `config` is the `["config"]` PDA with `has_one = admin`.
+- `update_config` re-runs every range check on the resulting values.
+- Neither takes a game account.
+
+### create_game
+- `creator` signs and pays.
+- `config` is the `["config"]` PDA; the program must not be paused.
+- `game` is created at PDA `["game", creator, game_id]`, so a creator cannot
+  overwrite an open game.
+- Stake is at least `min_stake`; the creator is not the treasury.
+- The stake moves in through a system-program transfer signed by the creator.
+
+### join_game
+- `opponent` signs.
+- `config` and `game` are PDAs checked by seeds and stored bump; not paused.
+- Status is `Open`; the move is 0, 1, or 2; the opponent is neither the creator
+  nor the game's treasury; `expected_stake` equals the game's stake.
+- The stake moves in through a system-program transfer signed by the opponent,
+  and the instruction fails as a whole if that transfer fails.
+
+### reveal
+- `creator` signs; `game` is a PDA with `has_one` on creator, opponent, and treasury.
+- Status is `Joined`; the move is 0, 1, or 2; the hash matches the commitment.
+- Payouts are computed with checked arithmetic and come out of the game account.
+- The game account is closed and its rent returns to the creator.
+
+### cancel_game
+- `creator` signs; `game` is a PDA with `has_one = creator`.
+- Status is `Open`. Closing the account returns the stake and rent together.
+
+### claim_forfeit
+- `opponent` signs; `game` is a PDA with `has_one` on opponent and creator.
+- Status is `Joined`; the clock is at or past `joined_at + reveal_timeout`.
+- The whole pot goes to the opponent, with no fee. Rent returns to the creator.
+
+## Code rules
+
+- No `unwrap`, `expect`, or `panic!` in program code outside unit tests.
+- All arithmetic uses `checked_*` operations.
+- 64 tests cover every instruction, including all nine move combinations,
+  wrong salt and move, every out-of-order action, non-player attempts, the
+  paused state, fee rounding, and rent return. Run them with `cargo test -p rps`.
+
+## Known limits
+
+- **Losing the salt means losing the stake.** The program cannot tell a lost salt
+  from a refusal to reveal. The frontend forces a backup download for this reason.
+- **The opponent's move is public.** That is safe because the creator's move is
+  already committed, but it means the creator knows the result before revealing.
+  The forfeit timeout is what makes a losing creator reveal or lose anyway.
+- **Validator clock.** Timeouts use the cluster clock, which can drift by a few
+  seconds. The minimum timeout is 60 seconds.
+- **Upgrade authority.** Whoever holds the program's upgrade authority can replace
+  the program. On devnet this is the deployer's wallet.
+- **A late reveal races a forfeit claim.** After the deadline, whichever
+  transaction lands first decides the game.
+
+## Reporting
+
+Open a private security advisory on the GitHub repository.

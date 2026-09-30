@@ -325,7 +325,12 @@ fn config_changes_after_creation_do_not_touch_a_live_game() {
     let mut params = no_update();
     params.fee_bps = Some(1_000);
     params.treasury = Some(new_treasury);
-    send(&mut env, ix_update_config(&admin.pubkey(), params), &[&admin]).unwrap();
+    send(
+        &mut env,
+        ix_update_config(&admin.pubkey(), params),
+        &[&admin],
+    )
+    .unwrap();
 
     let opponent = join(&mut env, &created, 0);
     let treasury_before = balance(&env, &original_treasury);
@@ -345,7 +350,12 @@ fn the_fee_is_waived_when_it_cannot_be_paid_into_an_empty_treasury() {
     let empty_treasury = Pubkey::new_unique();
     let mut params = no_update();
     params.treasury = Some(empty_treasury);
-    send(&mut env, ix_update_config(&admin.pubkey(), params), &[&admin]).unwrap();
+    send(
+        &mut env,
+        ix_update_config(&admin.pubkey(), params),
+        &[&admin],
+    )
+    .unwrap();
 
     // Pot 0.02 SOL, fee 500,000 lamports: below the rent-exempt minimum of 890,880.
     let stake = DEFAULT_MIN_STAKE;
@@ -368,7 +378,12 @@ fn an_empty_treasury_still_receives_a_fee_large_enough_to_be_rent_exempt() {
     let empty_treasury = Pubkey::new_unique();
     let mut params = no_update();
     params.treasury = Some(empty_treasury);
-    send(&mut env, ix_update_config(&admin.pubkey(), params), &[&admin]).unwrap();
+    send(
+        &mut env,
+        ix_update_config(&admin.pubkey(), params),
+        &[&admin],
+    )
+    .unwrap();
 
     let created = create(&mut env, 1, SOL);
     let opponent = join(&mut env, &created, 0);

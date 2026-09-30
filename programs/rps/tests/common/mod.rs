@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports)]
+#![allow(dead_code, unused_imports, clippy::result_large_err)]
 
 use {
     anchor_lang::{

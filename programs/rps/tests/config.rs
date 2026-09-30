@@ -1,8 +1,6 @@
 mod common;
 
-use {
-    anchor_lang::prelude::Pubkey, common::*, rps::errors::RpsError, solana_signer::Signer,
-};
+use {anchor_lang::prelude::Pubkey, common::*, rps::errors::RpsError, solana_signer::Signer};
 
 #[test]
 fn upgrade_authority_initializes_config_with_given_values() {
@@ -73,7 +71,12 @@ fn admin_updates_config() {
     params.fee_bps = Some(1_000);
     params.min_stake = Some(1_000_000);
     params.reveal_timeout = Some(60);
-    send(&mut env, ix_update_config(&admin.pubkey(), params), &[&admin]).unwrap();
+    send(
+        &mut env,
+        ix_update_config(&admin.pubkey(), params),
+        &[&admin],
+    )
+    .unwrap();
 
     let config = read_config(&env);
     assert_eq!(config.treasury, new_treasury);
@@ -89,17 +92,29 @@ fn update_rejects_out_of_range_values() {
 
     let mut params = no_update();
     params.fee_bps = Some(1_001);
-    let result = send(&mut env, ix_update_config(&admin.pubkey(), params), &[&admin]);
+    let result = send(
+        &mut env,
+        ix_update_config(&admin.pubkey(), params),
+        &[&admin],
+    );
     assert_rps_err(result, RpsError::FeeTooHigh);
 
     let mut params = no_update();
     params.min_stake = Some(999_999);
-    let result = send(&mut env, ix_update_config(&admin.pubkey(), params), &[&admin]);
+    let result = send(
+        &mut env,
+        ix_update_config(&admin.pubkey(), params),
+        &[&admin],
+    );
     assert_rps_err(result, RpsError::MinStakeTooLow);
 
     let mut params = no_update();
     params.reveal_timeout = Some(0);
-    let result = send(&mut env, ix_update_config(&admin.pubkey(), params), &[&admin]);
+    let result = send(
+        &mut env,
+        ix_update_config(&admin.pubkey(), params),
+        &[&admin],
+    );
     assert_rps_err(result, RpsError::InvalidTimeout);
 
     assert_eq!(read_config(&env).fee_bps, 250);
@@ -134,7 +149,12 @@ fn admin_can_hand_over_the_admin_role() {
     let successor = funded(&mut env, SOL);
     let mut params = no_update();
     params.admin = Some(successor.pubkey());
-    send(&mut env, ix_update_config(&admin.pubkey(), params), &[&admin]).unwrap();
+    send(
+        &mut env,
+        ix_update_config(&admin.pubkey(), params),
+        &[&admin],
+    )
+    .unwrap();
 
     let result = send(&mut env, ix_set_paused(&admin.pubkey(), true), &[&admin]);
     assert_rps_err(result, RpsError::Unauthorized);

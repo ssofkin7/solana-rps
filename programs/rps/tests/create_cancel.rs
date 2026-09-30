@@ -83,7 +83,12 @@ fn the_treasury_wallet_cannot_create_a_game() {
     let treasury = funded(&mut env, 2 * SOL);
     let mut params = no_update();
     params.treasury = Some(treasury.pubkey());
-    send(&mut env, ix_update_config(&admin.pubkey(), params), &[&admin]).unwrap();
+    send(
+        &mut env,
+        ix_update_config(&admin.pubkey(), params),
+        &[&admin],
+    )
+    .unwrap();
 
     let commitment = commit(0, &[1u8; 32], &treasury.pubkey());
     let result = send(
