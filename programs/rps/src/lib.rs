@@ -41,4 +41,8 @@ pub mod rps {
     pub fn cancel_game(ctx: Context<CancelGame>) -> Result<()> {
         ctx.accounts.handle()
     }
+
+    pub fn join_game(ctx: Context<JoinGame>, mv: u8, expected_stake: u64) -> Result<()> {
+        ctx.accounts.handle(mv, expected_stake)
+    }
 }

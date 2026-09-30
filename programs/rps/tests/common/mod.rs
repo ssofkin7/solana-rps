@@ -304,3 +304,39 @@ pub fn create(env: &mut Env, mv: u8, stake: u64) -> Created {
         stake,
     }
 }
+
+pub fn ix_join_game(opponent: &Pubkey, game: &Pubkey, mv: u8, expected_stake: u64) -> Instruction {
+    Instruction::new_with_bytes(
+        rps::ID,
+        &rps::instruction::JoinGame { mv, expected_stake }.data(),
+        rps::accounts::JoinGame {
+            opponent: *opponent,
+            config: config_address(),
+            game: *game,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+/// A fresh opponent holding `stake + 1 SOL` joins with `mv`.
+pub fn join(env: &mut Env, created: &Created, mv: u8) -> Keypair {
+    let opponent = funded(env, created.stake.checked_add(SOL).unwrap());
+    send(
+        env,
+        ix_join_game(&opponent.pubkey(), &created.game, mv, created.stake),
+        &[&opponent],
+    )
+    .unwrap();
+    opponent
+}
+
+pub fn now(env: &Env) -> i64 {
+    env.svm.get_sysvar::<Clock>().unix_timestamp
+}
+
+pub fn advance_clock(env: &mut Env, secs: i64) {
+    let mut clock = env.svm.get_sysvar::<Clock>();
+    clock.unix_timestamp = clock.unix_timestamp.checked_add(secs).unwrap();
+    env.svm.set_sysvar::<Clock>(&clock);
+}
