@@ -1,6 +1,7 @@
 // One-time setup after a devnet deploy: creates the global Config account.
 // Must be run by the program's upgrade authority (~/.config/solana/id.json).
 import * as anchor from "@anchor-lang/core";
+import BN from "bn.js";
 import {
   Connection,
   Keypair,
@@ -73,8 +74,8 @@ if ((await connection.getBalance(treasury)) < TREASURY_FLOAT_LAMPORTS) {
 const signature = await program.methods
   .initializeConfig({
     feeBps: FEE_BPS,
-    minStake: new anchor.BN(MIN_STAKE_LAMPORTS),
-    revealTimeout: new anchor.BN(REVEAL_TIMEOUT_SECONDS),
+    minStake: new BN(MIN_STAKE_LAMPORTS),
+    revealTimeout: new BN(REVEAL_TIMEOUT_SECONDS),
   })
   .accountsStrict({
     authority: authority.publicKey,
