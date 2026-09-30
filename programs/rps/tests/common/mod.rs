@@ -209,3 +209,98 @@ pub fn ix_set_paused(admin: &Pubkey, paused: bool) -> Instruction {
         .to_account_metas(None),
     )
 }
+
+/// Hashes with the `sha2` crate rather than the program's own function, so a
+/// wrong formula in the program cannot hide.
+pub fn commit(mv: u8, salt: &[u8; 32], creator: &Pubkey) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update([mv]);
+    hasher.update(salt);
+    hasher.update(creator.as_ref());
+    hasher.finalize().into()
+}
+
+pub fn game_rent(env: &Env) -> u64 {
+    env.svm
+        .minimum_balance_for_rent_exemption(8 + <Game as anchor_lang::Space>::INIT_SPACE)
+}
+
+pub fn read_game(env: &Env, address: &Pubkey) -> Option<Game> {
+    let account = env.svm.get_account(address)?;
+    if account.lamports == 0 || account.data.is_empty() {
+        return None;
+    }
+    Game::try_deserialize(&mut account.data.as_slice()).ok()
+}
+
+pub fn game_exists(env: &Env, address: &Pubkey) -> bool {
+    read_game(env, address).is_some()
+}
+
+pub fn ix_create_game(
+    creator: &Pubkey,
+    game_id: u64,
+    stake: u64,
+    commitment: [u8; 32],
+) -> Instruction {
+    Instruction::new_with_bytes(
+        rps::ID,
+        &rps::instruction::CreateGame {
+            game_id,
+            stake,
+            commitment,
+        }
+        .data(),
+        rps::accounts::CreateGame {
+            creator: *creator,
+            config: config_address(),
+            game: game_address(creator, game_id),
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+pub fn ix_cancel_game(creator: &Pubkey, game: &Pubkey) -> Instruction {
+    Instruction::new_with_bytes(
+        rps::ID,
+        &rps::instruction::CancelGame {}.data(),
+        rps::accounts::CancelGame {
+            creator: *creator,
+            game: *game,
+        }
+        .to_account_metas(None),
+    )
+}
+
+pub struct Created {
+    pub creator: Keypair,
+    pub game_id: u64,
+    pub game: Pubkey,
+    pub mv: u8,
+    pub salt: [u8; 32],
+    pub stake: u64,
+}
+
+/// A fresh creator holding `stake + 1 SOL` opens a game with `mv`.
+pub fn create(env: &mut Env, mv: u8, stake: u64) -> Created {
+    let creator = funded(env, stake.checked_add(SOL).unwrap());
+    let game_id = 1;
+    let salt = [42u8; 32];
+    let commitment = commit(mv, &salt, &creator.pubkey());
+    send(
+        env,
+        ix_create_game(&creator.pubkey(), game_id, stake, commitment),
+        &[&creator],
+    )
+    .unwrap();
+    let game = game_address(&creator.pubkey(), game_id);
+    Created {
+        creator,
+        game_id,
+        game,
+        mv,
+        salt,
+        stake,
+    }
+}

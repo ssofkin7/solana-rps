@@ -27,4 +27,18 @@ pub mod rps {
     pub fn set_paused(ctx: Context<AdminOnly>, paused: bool) -> Result<()> {
         ctx.accounts.set_paused(paused)
     }
+
+    pub fn create_game(
+        ctx: Context<CreateGame>,
+        game_id: u64,
+        stake: u64,
+        commitment: [u8; 32],
+    ) -> Result<()> {
+        let bump = ctx.bumps.game;
+        ctx.accounts.handle(game_id, stake, commitment, bump)
+    }
+
+    pub fn cancel_game(ctx: Context<CancelGame>) -> Result<()> {
+        ctx.accounts.handle()
+    }
 }
