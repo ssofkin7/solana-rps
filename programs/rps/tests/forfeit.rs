@@ -148,17 +148,21 @@ fn only_the_opponent_can_claim() {
     let (mut env, _admin) = setup();
     let treasury = env.treasury;
     let created = create(&mut env, 0, SOL);
-    let _opponent = join(&mut env, &created, 1);
+    let opponent = join(&mut env, &created, 1);
     advance_clock(&mut env, DEFAULT_TIMEOUT);
 
     let stranger = funded(&mut env, SOL);
     let result = send(
         &mut env,
-        ix_claim_forfeit(
-            &stranger.pubkey(),
-            &created.game,
+        aimed_at(
+            ix_claim_forfeit(
+                &stranger.pubkey(),
+                &created.game,
+                &created.creator.pubkey(),
+                &treasury,
+            ),
             &created.creator.pubkey(),
-            &treasury,
+            &opponent.pubkey(),
         ),
         &[&stranger],
     );
@@ -166,11 +170,15 @@ fn only_the_opponent_can_claim() {
 
     let result = send(
         &mut env,
-        ix_claim_forfeit(
+        aimed_at(
+            ix_claim_forfeit(
+                &created.creator.pubkey(),
+                &created.game,
+                &created.creator.pubkey(),
+                &treasury,
+            ),
             &created.creator.pubkey(),
-            &created.game,
-            &created.creator.pubkey(),
-            &treasury,
+            &opponent.pubkey(),
         ),
         &[&created.creator],
     );
@@ -188,11 +196,15 @@ fn forfeit_on_a_game_nobody_joined_fails() {
     let stranger = funded(&mut env, SOL);
     let result = send(
         &mut env,
-        ix_claim_forfeit(
-            &stranger.pubkey(),
-            &created.game,
+        aimed_at(
+            ix_claim_forfeit(
+                &stranger.pubkey(),
+                &created.game,
+                &created.creator.pubkey(),
+                &treasury,
+            ),
             &created.creator.pubkey(),
-            &treasury,
+            &anchor_lang::prelude::Pubkey::default(),
         ),
         &[&stranger],
     );
@@ -210,11 +222,15 @@ fn the_rent_cannot_be_redirected_away_from_the_creator() {
     let accomplice = funded(&mut env, SOL);
     let result = send(
         &mut env,
-        ix_claim_forfeit(
+        aimed_at(
+            ix_claim_forfeit(
+                &opponent.pubkey(),
+                &created.game,
+                &accomplice.pubkey(),
+                &treasury,
+            ),
+            &created.creator.pubkey(),
             &opponent.pubkey(),
-            &created.game,
-            &accomplice.pubkey(),
-            &treasury,
         ),
         &[&opponent],
     );

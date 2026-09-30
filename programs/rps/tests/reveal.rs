@@ -203,7 +203,23 @@ fn reveal_before_anyone_joined_fails() {
     let (mut env, _admin) = setup();
     let created = create(&mut env, 0, SOL);
     let nobody = Pubkey::new_unique();
-    let result = reveal(&mut env, &created, &nobody);
+    let treasury = env.treasury;
+    let result = send(
+        &mut env,
+        aimed_at(
+            ix_reveal(
+                &created.creator.pubkey(),
+                &created.game,
+                &nobody,
+                &treasury,
+                created.mv,
+                created.salt,
+            ),
+            &created.creator.pubkey(),
+            &Pubkey::default(),
+        ),
+        &[&created.creator],
+    );
     assert_rps_err(result, RpsError::Unauthorized);
     assert!(game_exists(&env, &created.game));
 }
@@ -233,13 +249,17 @@ fn only_the_creator_can_reveal() {
     for impostor in [&opponent, &stranger] {
         let result = send(
             &mut env,
-            ix_reveal(
-                &impostor.pubkey(),
-                &created.game,
+            aimed_at(
+                ix_reveal(
+                    &impostor.pubkey(),
+                    &created.game,
+                    &opponent.pubkey(),
+                    &treasury,
+                    created.mv,
+                    created.salt,
+                ),
+                &created.creator.pubkey(),
                 &opponent.pubkey(),
-                &treasury,
-                created.mv,
-                created.salt,
             ),
             &[impostor],
         );
@@ -283,13 +303,17 @@ fn substituted_opponent_or_treasury_accounts_are_rejected() {
 
     let result = send(
         &mut env,
-        ix_reveal(
+        aimed_at(
+            ix_reveal(
+                &created.creator.pubkey(),
+                &created.game,
+                &accomplice.pubkey(),
+                &treasury,
+                created.mv,
+                created.salt,
+            ),
             &created.creator.pubkey(),
-            &created.game,
-            &accomplice.pubkey(),
-            &treasury,
-            created.mv,
-            created.salt,
+            &opponent.pubkey(),
         ),
         &[&created.creator],
     );
@@ -426,7 +450,8 @@ fn an_opponent_with_a_zero_balance_is_still_settled() {
     // Tie: the refund lands in an emptied wallet.
     let (mut env, _admin) = setup();
     let created = create(&mut env, 0, SOL);
-    let opponent = funded(&mut env, SOL);
+    let stats_deposit = stats_rent(&env);
+    let opponent = funded(&mut env, SOL + stats_deposit);
     send(
         &mut env,
         ix_join_game(
@@ -446,7 +471,8 @@ fn an_opponent_with_a_zero_balance_is_still_settled() {
     // Loss: the opponent receives nothing and settlement still succeeds.
     let (mut env, _admin) = setup();
     let created = create(&mut env, 1, SOL);
-    let opponent = funded(&mut env, SOL);
+    let stats_deposit = stats_rent(&env);
+    let opponent = funded(&mut env, SOL + stats_deposit);
     send(
         &mut env,
         ix_join_game(
@@ -512,7 +538,10 @@ fn a_stake_too_large_to_double_cannot_be_joined_and_can_be_cancelled() {
         &[&created.creator],
     )
     .unwrap();
-    assert_eq!(balance(&env, &created.creator.pubkey()), stake + SOL);
+    assert_eq!(
+        balance(&env, &created.creator.pubkey()),
+        stake + SOL - stats_rent(&env)
+    );
 }
 
 #[test]

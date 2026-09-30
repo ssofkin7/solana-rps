@@ -11,10 +11,10 @@ use {
         LiteSVM,
     },
     rps::{
-        constants::{CONFIG_SEED, GAME_SEED},
+        constants::{CONFIG_SEED, GAME_SEED, STATS_SEED},
         errors::RpsError,
         instructions::{ConfigParams, UpdateConfigParams},
-        state::{Config, Game},
+        state::{Config, Game, PlayerStats},
     },
     sha2::{Digest, Sha256},
     solana_account::Account,
@@ -173,6 +173,7 @@ pub fn assert_anchor_err(result: TxResult, accepted_codes: &[u32]) {
 
 // Anchor's built-in error codes used by these tests.
 pub const ANCHOR_CONSTRAINT_MUT: u32 = 2000;
+pub const ANCHOR_CONSTRAINT_SEEDS: u32 = 2006;
 pub const ANCHOR_ACCOUNT_OWNED_BY_WRONG_PROGRAM: u32 = 3007;
 pub const ANCHOR_ACCOUNT_NOT_SYSTEM_OWNED: u32 = 3011;
 pub const ANCHOR_ACCOUNT_NOT_INITIALIZED: u32 = 3012;
@@ -304,6 +305,7 @@ pub fn ix_create_game(
             creator: *creator,
             config: config_address(),
             game: game_address(creator, game_id),
+            creator_stats: stats_address(creator),
             system_program: system_program::ID,
         }
         .to_account_metas(None),
@@ -375,6 +377,7 @@ pub fn ix_join_game(
             opponent: *opponent,
             config: config_address(),
             game: *game,
+            opponent_stats: stats_address(opponent),
             system_program: system_program::ID,
         }
         .to_account_metas(None),
@@ -425,6 +428,9 @@ pub fn ix_reveal(
             game: *game,
             opponent: *opponent,
             treasury: *treasury,
+            creator_stats: stats_address(creator),
+            opponent_stats: stats_address(opponent),
+            system_program: system_program::ID,
         }
         .to_account_metas(None),
     )
@@ -463,6 +469,9 @@ pub fn ix_claim_forfeit(
             game: *game,
             creator: *creator,
             treasury: *treasury,
+            creator_stats: stats_address(creator),
+            opponent_stats: stats_address(opponent),
+            system_program: system_program::ID,
         }
         .to_account_metas(None),
     )
@@ -477,4 +486,32 @@ pub fn send_many(env: &mut Env, ixs: &[Instruction], signers: &[&Keypair]) -> Tx
     all.extend_from_slice(signers);
     let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(message), &all).unwrap();
     env.svm.send_transaction(tx)
+}
+
+pub fn stats_address(player: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(&[STATS_SEED, player.as_ref()], &rps::ID).0
+}
+
+pub fn read_stats(env: &Env, player: &Pubkey) -> Option<PlayerStats> {
+    let account = env.svm.get_account(&stats_address(player))?;
+    if account.lamports == 0 || account.data.is_empty() {
+        return None;
+    }
+    PlayerStats::try_deserialize(&mut account.data.as_slice()).ok()
+}
+
+/// Rent a player pays once, for their stats account, on their first game.
+pub fn stats_rent(env: &Env) -> u64 {
+    env.svm
+        .minimum_balance_for_rent_exemption(8 + <PlayerStats as anchor_lang::Space>::INIT_SPACE)
+}
+
+/// Points the two stats accounts of a reveal or forfeit instruction at the
+/// real players of the game, as an attacker who read the chain would. The
+/// builders otherwise derive them from whichever wallets are passed.
+pub fn aimed_at(mut ix: Instruction, creator: &Pubkey, opponent: &Pubkey) -> Instruction {
+    let count = ix.accounts.len();
+    ix.accounts[count - 3].pubkey = stats_address(creator);
+    ix.accounts[count - 2].pubkey = stats_address(opponent);
+    ix
 }

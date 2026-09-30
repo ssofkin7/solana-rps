@@ -4,10 +4,10 @@ use anchor_lang::{
 };
 
 use crate::{
-    constants::{CONFIG_SEED, GAME_SEED},
+    constants::{CONFIG_SEED, GAME_SEED, STATS_SEED},
     errors::RpsError,
     events::GameCreated,
-    state::{Config, Game, GameStatus},
+    state::{Config, Game, GameStatus, PlayerStats},
 };
 
 #[derive(Accounts)]
@@ -25,6 +25,15 @@ pub struct CreateGame<'info> {
         bump
     )]
     pub game: Account<'info, Game>,
+    /// Created on the first game, at the creator's cost.
+    #[account(
+        init_if_needed,
+        payer = creator,
+        space = 8 + PlayerStats::INIT_SPACE,
+        seeds = [STATS_SEED, creator.key().as_ref()],
+        bump
+    )]
+    pub creator_stats: Account<'info, PlayerStats>,
     pub system_program: Program<'info, System>,
 }
 
@@ -35,6 +44,7 @@ impl<'info> CreateGame<'info> {
         stake: u64,
         commitment: [u8; 32],
         bump: u8,
+        stats_bump: u8,
     ) -> Result<()> {
         require!(!self.config.paused, RpsError::Paused);
         require!(stake >= self.config.min_stake, RpsError::StakeTooLow);
@@ -43,6 +53,7 @@ impl<'info> CreateGame<'info> {
             self.config.treasury,
             RpsError::TreasuryCannotPlay
         );
+        self.creator_stats.open(self.creator.key(), stats_bump);
 
         // Fee, treasury and timeout are copied in, so later config changes
         // never alter the terms of this game.

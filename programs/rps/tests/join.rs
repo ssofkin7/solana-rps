@@ -16,7 +16,7 @@ fn join_matches_the_stake_and_records_move_and_time() {
     let joined_at = now(&env);
     let opponent = join(&mut env, &created, 2);
 
-    assert_eq!(balance(&env, &opponent.pubkey()), SOL);
+    assert_eq!(balance(&env, &opponent.pubkey()), SOL - stats_rent(&env));
     assert_eq!(balance(&env, &created.game), 2 * stake + game_rent(&env));
 
     let game = read_game(&env, &created.game).unwrap();

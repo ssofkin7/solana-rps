@@ -86,3 +86,72 @@ impl Game {
         }
     }
 }
+
+/// How a settled game ended for one player.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Finish {
+    Won,
+    Lost,
+    Tied,
+}
+
+/// Lifetime record for one player. Created on their first game, updated at
+/// every settlement, and never closed, so the leaderboard can be read straight
+/// from the chain. Cancelled games are not counted.
+#[account]
+#[derive(InitSpace)]
+pub struct PlayerStats {
+    pub player: Pubkey,
+    pub games: u64,
+    pub wins: u64,
+    pub losses: u64,
+    pub ties: u64,
+    /// Games this player lost by not revealing in time.
+    pub forfeits: u64,
+    /// Lamports this player put in, one stake per settled game.
+    pub staked: u64,
+    /// Lamports paid back to this player: winnings and tie refunds.
+    pub received: u64,
+    /// Lamports of fee taken from this player's winnings.
+    pub fees_paid: u64,
+    pub bump: u8,
+}
+
+impl PlayerStats {
+    /// Fills in the owner the first time the account is used.
+    pub fn open(&mut self, player: Pubkey, bump: u8) {
+        if self.player == Pubkey::default() {
+            self.player = player;
+            self.bump = bump;
+        }
+    }
+
+    pub fn record(
+        &mut self,
+        finish: Finish,
+        stake: u64,
+        received: u64,
+        fee_paid: u64,
+        forfeited: bool,
+    ) -> Result<()> {
+        self.games = add(self.games, 1)?;
+        match finish {
+            Finish::Won => self.wins = add(self.wins, 1)?,
+            Finish::Lost => self.losses = add(self.losses, 1)?,
+            Finish::Tied => self.ties = add(self.ties, 1)?,
+        }
+        if forfeited {
+            self.forfeits = add(self.forfeits, 1)?;
+        }
+        self.staked = add(self.staked, stake)?;
+        self.received = add(self.received, received)?;
+        self.fees_paid = add(self.fees_paid, fee_paid)?;
+        Ok(())
+    }
+}
+
+fn add(total: u64, amount: u64) -> Result<u64> {
+    total
+        .checked_add(amount)
+        .ok_or_else(|| error!(RpsError::MathOverflow))
+}

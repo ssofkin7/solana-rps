@@ -4,11 +4,11 @@ use anchor_lang::{
 };
 
 use crate::{
-    constants::{CONFIG_SEED, GAME_SEED},
+    constants::{CONFIG_SEED, GAME_SEED, STATS_SEED},
     errors::RpsError,
     events::GameJoined,
     logic::is_valid_move,
-    state::{Config, Game, GameStatus},
+    state::{Config, Game, GameStatus, PlayerStats},
 };
 
 #[derive(Accounts)]
@@ -23,6 +23,15 @@ pub struct JoinGame<'info> {
         bump = game.bump
     )]
     pub game: Account<'info, Game>,
+    /// Created on the first game, at the opponent's cost.
+    #[account(
+        init_if_needed,
+        payer = opponent,
+        space = 8 + PlayerStats::INIT_SPACE,
+        seeds = [STATS_SEED, opponent.key().as_ref()],
+        bump
+    )]
+    pub opponent_stats: Account<'info, PlayerStats>,
     pub system_program: Program<'info, System>,
 }
 
@@ -32,6 +41,7 @@ impl<'info> JoinGame<'info> {
         mv: u8,
         expected_stake: u64,
         expected_commitment: [u8; 32],
+        stats_bump: u8,
     ) -> Result<()> {
         require!(!self.config.paused, RpsError::Paused);
         require!(
@@ -75,6 +85,7 @@ impl<'info> JoinGame<'info> {
             .ok_or(RpsError::MathOverflow)?;
 
         let opponent = self.opponent.key();
+        self.opponent_stats.open(opponent, stats_bump);
         let game = &mut self.game;
         game.status = GameStatus::Joined;
         game.opponent = opponent;

@@ -128,6 +128,60 @@ export type Rps = {
           "relations": [
             "game"
           ]
+        },
+        {
+          "name": "creatorStats",
+          "docs": [
+            "Normally created when the game was. `init_if_needed` covers a game that",
+            "predates stats, so a forfeit can always be claimed."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.creator",
+                "account": "game"
+              }
+            ]
+          }
+        },
+        {
+          "name": "opponentStats",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.opponent",
+                "account": "game"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -189,6 +243,31 @@ export type Rps = {
               {
                 "kind": "arg",
                 "path": "gameId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "creatorStats",
+          "docs": [
+            "Created on the first game, at the creator's cost."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
               }
             ]
           }
@@ -355,6 +434,31 @@ export type Rps = {
           }
         },
         {
+          "name": "opponentStats",
+          "docs": [
+            "Created on the first game, at the opponent's cost."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "opponent"
+              }
+            ]
+          }
+        },
+        {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
@@ -444,6 +548,60 @@ export type Rps = {
           "relations": [
             "game"
           ]
+        },
+        {
+          "name": "creatorStats",
+          "docs": [
+            "Normally created when the game was. `init_if_needed` covers a game that",
+            "predates stats, so it can always be settled."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.creator",
+                "account": "game"
+              }
+            ]
+          }
+        },
+        {
+          "name": "opponentStats",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.opponent",
+                "account": "game"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -595,6 +753,19 @@ export type Rps = {
         100,
         121,
         18
+      ]
+    },
+    {
+      "name": "playerStats",
+      "discriminator": [
+        169,
+        146,
+        242,
+        176,
+        102,
+        118,
+        231,
+        172
       ]
     }
   ],
@@ -1060,6 +1231,71 @@ export type Rps = {
           },
           {
             "name": "tie"
+          }
+        ]
+      }
+    },
+    {
+      "name": "playerStats",
+      "docs": [
+        "Lifetime record for one player. Created on their first game, updated at",
+        "every settlement, and never closed, so the leaderboard can be read straight",
+        "from the chain. Cancelled games are not counted."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "games",
+            "type": "u64"
+          },
+          {
+            "name": "wins",
+            "type": "u64"
+          },
+          {
+            "name": "losses",
+            "type": "u64"
+          },
+          {
+            "name": "ties",
+            "type": "u64"
+          },
+          {
+            "name": "forfeits",
+            "docs": [
+              "Games this player lost by not revealing in time."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "staked",
+            "docs": [
+              "Lamports this player put in, one stake per settled game."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "received",
+            "docs": [
+              "Lamports paid back to this player: winnings and tie refunds."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "feesPaid",
+            "docs": [
+              "Lamports of fee taken from this player's winnings."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }

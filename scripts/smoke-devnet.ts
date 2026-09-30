@@ -35,12 +35,17 @@ const funder = Keypair.fromSecretKey(
 );
 const connection = new Connection(RPC_URL, "confirmed");
 const idl = JSON.parse(readFileSync("target/idl/rps.json", "utf8"));
+const idlAddress = new PublicKey(idl.address);
 
 function programFor(signer: Keypair) {
   const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(signer), {
     commitment: "confirmed",
   });
   return new anchor.Program(idl as anchor.Idl, provider);
+}
+
+function statsOf(player: PublicKey) {
+  return PublicKey.findProgramAddressSync([Buffer.from("stats"), player.toBuffer()], idlAddress)[0];
 }
 
 function link(signature: string) {
@@ -91,6 +96,7 @@ const createSig = await program.methods
     creator: creator.publicKey,
     config,
     game,
+    creatorStats: statsOf(creator.publicKey),
     systemProgram: SystemProgram.programId,
   })
   .rpc();
@@ -102,6 +108,7 @@ const joinSig = await programFor(opponent)
     opponent: opponent.publicKey,
     config,
     game,
+    opponentStats: statsOf(opponent.publicKey),
     systemProgram: SystemProgram.programId,
   })
   .rpc();
@@ -117,6 +124,9 @@ const revealSig = await program.methods
     game,
     opponent: opponent.publicKey,
     treasury,
+    creatorStats: statsOf(creator.publicKey),
+    opponentStats: statsOf(opponent.publicKey),
+    systemProgram: SystemProgram.programId,
   })
   .rpc();
 console.log("reveal  ", link(revealSig));
@@ -130,6 +140,15 @@ const gameGone = (await connection.getAccountInfo(game)) === null;
 console.log(`opponent gained ${opponentGain} lamports (expected ${pot - expectedFee})`);
 console.log(`treasury gained ${treasuryGain} lamports (expected ${expectedFee})`);
 console.log(`game account closed: ${gameGone}`);
+
+const stats = (program.account as any).playerStats;
+const winnerStats = await stats.fetch(statsOf(opponent.publicKey));
+const loserStats = await stats.fetch(statsOf(creator.publicKey));
+console.log(`stats: opponent ${winnerStats.wins} win, creator ${loserStats.losses} loss`);
+const statsOk =
+  winnerStats.wins.toNumber() === 1 &&
+  loserStats.losses.toNumber() === 1 &&
+  winnerStats.feesPaid.toNumber() === expectedFee;
 
 // Sweep what is left back to the funder.
 for (const wallet of [creator, opponent]) {
@@ -149,7 +168,7 @@ for (const wallet of [creator, opponent]) {
   }
 }
 
-if (opponentGain !== pot - expectedFee || treasuryGain !== expectedFee || !gameGone) {
+if (opponentGain !== pot - expectedFee || treasuryGain !== expectedFee || !gameGone || !statsOk) {
   throw new Error("Smoke test FAILED: balances or game state are not what the program promises.");
 }
 console.log("Smoke test passed.");

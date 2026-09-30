@@ -15,7 +15,10 @@ fn create_moves_the_stake_into_the_game_account() {
     let rent = game_rent(&env);
 
     assert_eq!(balance(&env, &created.game), stake + rent);
-    assert_eq!(balance(&env, &created.creator.pubkey()), SOL - rent);
+    assert_eq!(
+        balance(&env, &created.creator.pubkey()),
+        SOL - rent - stats_rent(&env)
+    );
 
     let game = read_game(&env, &created.game).unwrap();
     assert_eq!(game.status, GameStatus::Open);
@@ -131,7 +134,10 @@ fn cancel_refunds_stake_and_rent_and_closes_the_game() {
     )
     .unwrap();
 
-    assert_eq!(balance(&env, &created.creator.pubkey()), stake + SOL);
+    assert_eq!(
+        balance(&env, &created.creator.pubkey()),
+        stake + SOL - stats_rent(&env)
+    );
     assert!(!game_exists(&env, &created.game));
     assert_eq!(balance(&env, &created.game), 0);
     assert_eq!(balance(&env, &env.treasury), treasury_before);
@@ -148,7 +154,10 @@ fn cancel_works_while_paused() {
         &[&created.creator],
     )
     .unwrap();
-    assert_eq!(balance(&env, &created.creator.pubkey()), 2 * SOL);
+    assert_eq!(
+        balance(&env, &created.creator.pubkey()),
+        2 * SOL - stats_rent(&env)
+    );
 }
 
 #[test]
@@ -173,7 +182,10 @@ fn cancelling_twice_fails() {
     send(&mut env, ix.clone(), &[&created.creator]).unwrap();
     let result = send(&mut env, ix, &[&created.creator]);
     assert!(result.is_err());
-    assert_eq!(balance(&env, &created.creator.pubkey()), 2 * SOL);
+    assert_eq!(
+        balance(&env, &created.creator.pubkey()),
+        2 * SOL - stats_rent(&env)
+    );
 }
 
 #[test]

@@ -10,3 +10,6 @@ pub const MIN_STAKE_FLOOR: u64 = 1_000_000;
 
 pub const MIN_REVEAL_TIMEOUT: i64 = 60;
 pub const MAX_REVEAL_TIMEOUT: i64 = 86_400;
+
+/// One per player, created on their first game and never closed.
+pub const STATS_SEED: &[u8] = b"stats";

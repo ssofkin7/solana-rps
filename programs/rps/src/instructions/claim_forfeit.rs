@@ -1,10 +1,10 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    constants::GAME_SEED,
+    constants::{GAME_SEED, STATS_SEED},
     errors::RpsError,
     events::GameForfeited,
-    state::{Game, GameStatus},
+    state::{Finish, Game, GameStatus, PlayerStats},
 };
 
 #[derive(Accounts)]
@@ -27,10 +27,29 @@ pub struct ClaimForfeit<'info> {
     /// CHECK: only receives lamports; `has_one` pins it to the treasury stored in the game.
     #[account(mut)]
     pub treasury: UncheckedAccount<'info>,
+    /// Normally created when the game was. `init_if_needed` covers a game that
+    /// predates stats, so a forfeit can always be claimed.
+    #[account(
+        init_if_needed,
+        payer = opponent,
+        space = 8 + PlayerStats::INIT_SPACE,
+        seeds = [STATS_SEED, game.creator.as_ref()],
+        bump
+    )]
+    pub creator_stats: Account<'info, PlayerStats>,
+    #[account(
+        init_if_needed,
+        payer = opponent,
+        space = 8 + PlayerStats::INIT_SPACE,
+        seeds = [STATS_SEED, game.opponent.as_ref()],
+        bump
+    )]
+    pub opponent_stats: Account<'info, PlayerStats>,
+    pub system_program: Program<'info, System>,
 }
 
 impl<'info> ClaimForfeit<'info> {
-    pub fn handle(&mut self) -> Result<()> {
+    pub fn handle(&mut self, creator_stats_bump: u8, opponent_stats_bump: u8) -> Result<()> {
         require!(
             self.game.status == GameStatus::Joined,
             RpsError::InvalidGameState
@@ -64,6 +83,15 @@ impl<'info> ClaimForfeit<'info> {
             self.game.sub_lamports(fee)?;
             self.treasury.add_lamports(fee)?;
         }
+
+        let stake = self.game.stake;
+        self.creator_stats
+            .open(self.game.creator, creator_stats_bump);
+        self.creator_stats.record(Finish::Lost, stake, 0, 0, true)?;
+        self.opponent_stats
+            .open(self.game.opponent, opponent_stats_bump);
+        self.opponent_stats
+            .record(Finish::Won, stake, payout, fee, false)?;
 
         emit!(GameForfeited {
             game: self.game.key(),

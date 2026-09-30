@@ -35,7 +35,9 @@ pub mod rps {
         commitment: [u8; 32],
     ) -> Result<()> {
         let bump = ctx.bumps.game;
-        ctx.accounts.handle(game_id, stake, commitment, bump)
+        let stats_bump = ctx.bumps.creator_stats;
+        ctx.accounts
+            .handle(game_id, stake, commitment, bump, stats_bump)
     }
 
     pub fn cancel_game(ctx: Context<CancelGame>) -> Result<()> {
@@ -48,14 +50,18 @@ pub mod rps {
         expected_stake: u64,
         expected_commitment: [u8; 32],
     ) -> Result<()> {
-        ctx.accounts.handle(mv, expected_stake, expected_commitment)
+        let stats_bump = ctx.bumps.opponent_stats;
+        ctx.accounts
+            .handle(mv, expected_stake, expected_commitment, stats_bump)
     }
 
     pub fn reveal(ctx: Context<Reveal>, mv: u8, salt: [u8; 32]) -> Result<()> {
-        ctx.accounts.handle(mv, salt)
+        let (creator_bump, opponent_bump) = (ctx.bumps.creator_stats, ctx.bumps.opponent_stats);
+        ctx.accounts.handle(mv, salt, creator_bump, opponent_bump)
     }
 
     pub fn claim_forfeit(ctx: Context<ClaimForfeit>) -> Result<()> {
-        ctx.accounts.handle()
+        let (creator_bump, opponent_bump) = (ctx.bumps.creator_stats, ctx.bumps.opponent_stats);
+        ctx.accounts.handle(creator_bump, opponent_bump)
     }
 }
