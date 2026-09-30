@@ -45,4 +45,8 @@ pub mod rps {
     pub fn join_game(ctx: Context<JoinGame>, mv: u8, expected_stake: u64) -> Result<()> {
         ctx.accounts.handle(mv, expected_stake)
     }
+
+    pub fn reveal(ctx: Context<Reveal>, mv: u8, salt: [u8; 32]) -> Result<()> {
+        ctx.accounts.handle(mv, salt)
+    }
 }

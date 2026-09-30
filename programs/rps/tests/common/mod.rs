@@ -340,3 +340,43 @@ pub fn advance_clock(env: &mut Env, secs: i64) {
     clock.unix_timestamp = clock.unix_timestamp.checked_add(secs).unwrap();
     env.svm.set_sysvar::<Clock>(&clock);
 }
+
+pub fn ix_reveal(
+    creator: &Pubkey,
+    game: &Pubkey,
+    opponent: &Pubkey,
+    treasury: &Pubkey,
+    mv: u8,
+    salt: [u8; 32],
+) -> Instruction {
+    Instruction::new_with_bytes(
+        rps::ID,
+        &rps::instruction::Reveal { mv, salt }.data(),
+        rps::accounts::Reveal {
+            creator: *creator,
+            game: *game,
+            opponent: *opponent,
+            treasury: *treasury,
+        }
+        .to_account_metas(None),
+    )
+}
+
+/// The honest reveal: the creator's real move and salt, the game's own treasury.
+pub fn reveal(env: &mut Env, created: &Created, opponent: &Pubkey) -> TxResult {
+    let treasury = read_game(env, &created.game)
+        .map(|game| game.treasury)
+        .unwrap_or(env.treasury);
+    send(
+        env,
+        ix_reveal(
+            &created.creator.pubkey(),
+            &created.game,
+            opponent,
+            &treasury,
+            created.mv,
+            created.salt,
+        ),
+        &[&created.creator],
+    )
+}
