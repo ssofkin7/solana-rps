@@ -9,6 +9,7 @@ import {
   type TransactionSignature,
 } from "@solana/web3.js";
 import BN from "bn.js";
+import { Buffer } from "buffer";
 import idl from "../idl/rps.json";
 import type { Rps } from "../idl/rps";
 import { commitmentFor } from "./commitment";

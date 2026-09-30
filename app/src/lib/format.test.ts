@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatAge, formatCountdown, formatSol, parseSol, shortAddress } from "./format";
+import {
+  formatAge,
+  formatCountdown,
+  formatDuration,
+  formatSol,
+  parseSol,
+  shortAddress,
+} from "./format";
 
 describe("formatSol", () => {
   it("shows whole and fractional SOL without trailing zeros", () => {
@@ -51,5 +58,16 @@ describe("formatCountdown", () => {
 describe("shortAddress", () => {
   it("keeps the ends of an address", () => {
     expect(shortAddress("DeDGEc6itNb78RVUSpWoQQbnoEkgJcFCfDfambdtY7XF")).toBe("DeDG…Y7XF");
+  });
+});
+
+describe("formatDuration", () => {
+  it("says a length of time in words", () => {
+    expect(formatDuration(600)).toBe("10 minutes");
+    expect(formatDuration(60)).toBe("1 minute");
+    expect(formatDuration(3_600)).toBe("1 hour");
+    expect(formatDuration(7_200)).toBe("2 hours");
+    expect(formatDuration(90)).toBe("90 seconds");
+    expect(formatDuration(1)).toBe("1 second");
   });
 });

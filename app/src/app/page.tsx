@@ -1,69 +1,199 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { PublicKey } from "@solana/web3.js";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { MovePicker } from "@/components/move-picker";
+import { TxStatus } from "@/components/tx-status";
+import { formatAge, formatDuration, formatSol, shortAddress } from "@/lib/format";
+import { useNow, usePolling, usePrograms, useTx } from "@/lib/hooks";
+import { watchGame } from "@/lib/local";
+import type { Move } from "@/lib/moves";
+import { fetchConfig, fetchOpenGames, joinGame } from "@/lib/rps";
+import { actionsFor, type GameView } from "@/lib/status";
+
+const POLL_MS = 10_000;
+
+function winnings(game: GameView): bigint {
+  const pot = game.stakeLamports * 2n;
+  return pot - (pot * BigInt(game.feeBps)) / 10_000n;
+}
+
+export default function LobbyPage() {
+  const { reader, signer, wallet } = usePrograms();
+  const now = useNow();
+  const router = useRouter();
+  const tx = useTx();
+
+  const loadGames = useCallback(() => fetchOpenGames(reader), [reader]);
+  const loadConfig = useCallback(() => fetchConfig(reader), [reader]);
+  const games = usePolling(loadGames, POLL_MS);
+  const config = usePolling(loadConfig, 60_000);
+
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [joining, setJoining] = useState<GameView | null>(null);
+  const [move, setMove] = useState<Move | null>(null);
+
+  useEffect(() => {
+    if (joining) dialog.current?.showModal();
+  }, [joining]);
+
+  const openJoin = (game: GameView) => {
+    tx.reset();
+    setMove(null);
+    setJoining(game);
+  };
+
+  const confirmJoin = async () => {
+    if (!joining || move === null || !signer || !wallet) return;
+    const signature = await tx.run("Join", () =>
+      joinGame(signer, new PublicKey(wallet), joining, move),
+    );
+    if (signature) {
+      watchGame(joining.address);
+      router.push("/games");
+    } else {
+      games.refresh();
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <>
+      <section className="flex flex-wrap items-end justify-between gap-6">
+        <div className="max-w-xl">
+          <h1 className="text-5xl font-extrabold text-ink sm:text-6xl">
+            Rock, paper, scissors for SOL
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="mt-4 text-lg">
+            Pick an open game, match the stake and play your hand. The creator&apos;s move was
+            sealed before you arrived, so neither side can peek.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <Link href="/create" className="button button-stake">
+          Create a game
+        </Link>
+      </section>
+
+      {config.data && (
+        <p className="mt-6 text-muted">
+          The winner pays a {config.data.feeBps / 100}% fee. Stakes start at{" "}
+          {formatSol(config.data.minStakeLamports)} SOL with no upper limit. Creators get{" "}
+          {formatDuration(config.data.revealTimeout)} to reveal once someone joins.
+        </p>
+      )}
+      {config.data?.paused && (
+        <p role="status" className="mt-4 rounded-xl border-2 border-alarm bg-sheet px-4 py-3">
+          New games and joins are paused right now. Games already in progress can still be
+          finished from My games.
+        </p>
+      )}
+
+      <section className="mt-10" aria-labelledby="open-games">
+        <div className="flex items-baseline justify-between gap-4">
+          <h2 id="open-games" className="text-3xl font-bold">
+            Open games
+          </h2>
+          <button className="button button-quiet" onClick={games.refresh}>
+            Refresh
+          </button>
         </div>
-      </main>
-    </div>
+
+        {games.error && (
+          <p role="alert" className="mt-4 rounded-xl border-2 border-alarm bg-sheet px-4 py-3">
+            Could not load the lobby. {games.error}
+          </p>
+        )}
+        {games.loading && !games.data && <p className="mt-4 text-muted">Loading open games.</p>}
+        {games.data?.length === 0 && (
+          <div className="mt-4 rounded-2xl border-2 border-dashed border-night px-6 py-10">
+            <p className="font-display text-2xl font-semibold">Nobody is waiting for a game.</p>
+            <p className="mt-2">Create one and it will show up here for someone to join.</p>
+            <Link href="/create" className="button button-stake mt-5">
+              Create a game
+            </Link>
+          </div>
+        )}
+
+        <ul className="mt-4 grid gap-4">
+          {games.data?.map((game) => {
+            const actions = actionsFor(game, wallet, now, false);
+            return (
+              <li key={game.address} className="ticket">
+                <div className="ticket-stub">
+                  <p className="figure text-3xl font-bold text-ink">
+                    {formatSol(game.stakeLamports)}
+                  </p>
+                  <p className="text-sm text-muted">SOL stake</p>
+                </div>
+                <div className="ticket-body">
+                  <p>
+                    {actions.role === "creator" ? "Your game" : `By ${shortAddress(game.creator)}`}
+                    <span className="text-muted">, opened {formatAge(now - game.createdAt)}</span>
+                    <br />
+                    <span className="text-muted">
+                      Win {formatSol(winnings(game))} SOL
+                    </span>
+                  </p>
+                  {actions.role === "creator" ? (
+                    <Link href="/games" className="button">
+                      Manage
+                    </Link>
+                  ) : actions.canJoin ? (
+                    <button className="button button-stake" onClick={() => openJoin(game)}>
+                      Join
+                    </button>
+                  ) : (
+                    <span className="text-muted">Connect a wallet to join</span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <dialog
+        ref={dialog}
+        className="sheet"
+        aria-labelledby="join-title"
+        onClose={() => setJoining(null)}
+      >
+        {joining && (
+          <>
+            <h2 id="join-title" className="text-3xl font-bold">
+              Join for {formatSol(joining.stakeLamports)} SOL
+            </h2>
+            <p className="mt-3">
+              You stake {formatSol(joining.stakeLamports)} SOL now. Win and you receive{" "}
+              {formatSol(winnings(joining))} SOL. A tie returns your stake.
+            </p>
+            <div className="mt-5">
+              <MovePicker
+                legend="Play your hand"
+                value={move}
+                onChange={setMove}
+                disabled={tx.busy}
+              />
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                className="button button-stake"
+                onClick={confirmJoin}
+                disabled={move === null || tx.busy}
+              >
+                Join game
+              </button>
+              <button className="button button-quiet" onClick={() => dialog.current?.close()}>
+                Back to the lobby
+              </button>
+            </div>
+            <div className="mt-4">
+              <TxStatus state={tx.state} />
+            </div>
+          </>
+        )}
+      </dialog>
+    </>
   );
 }

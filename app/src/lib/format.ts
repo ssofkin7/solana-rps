@@ -37,3 +37,11 @@ export function formatCountdown(seconds: number): string {
 export function shortAddress(address: string): string {
   return `${address.slice(0, 4)}…${address.slice(-4)}`;
 }
+
+/** A length of time in words, such as "10 minutes", for sentences rather than clocks. */
+export function formatDuration(seconds: number): string {
+  const plural = (count: number, unit: string) => `${count} ${unit}${count === 1 ? "" : "s"}`;
+  if (seconds >= 3_600 && seconds % 3_600 === 0) return plural(seconds / 3_600, "hour");
+  if (seconds >= 60 && seconds % 60 === 0) return plural(seconds / 60, "minute");
+  return plural(seconds, "second");
+}

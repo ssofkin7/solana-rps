@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "e2e-devnet": "tsx scripts/e2e-devnet.mts"
   },
   "dependencies": {
     "@anchor-lang/core": "1.2.0",

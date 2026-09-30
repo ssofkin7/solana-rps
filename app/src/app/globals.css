@@ -1,26 +1,233 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Two-colour print: cobalt ink on paper, yellow for money, pink-red for deadlines. */
+@theme {
+  --color-ink: #1d2bd6;
+  --color-ink-deep: #141e9c;
+  --color-paper: #f5f3ec;
+  --color-sheet: #fffdf7;
+  --color-night: #12122b;
+  --color-stake: #ffd60a;
+  --color-alarm: #ff3d68;
+  --color-rule: #c9cbe8;
+  --color-muted: #55577a;
+
+  --font-display: var(--font-bricolage), system-ui, sans-serif;
+  --font-sans: var(--font-instrument), system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--color-paper);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-night);
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+}
+
+/* Figures line up in lists of stakes and in countdowns. */
+.figure {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 3px;
+}
+
+.on-ink :focus-visible {
+  outline-color: var(--color-stake);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.55rem 1.15rem;
+  border: 2px solid var(--color-night);
+  border-radius: 999px;
+  background: var(--color-sheet);
+  color: var(--color-night);
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 1rem;
+  line-height: 1.1;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+  box-shadow: 0 3px 0 var(--color-night);
+}
+
+.button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 0 var(--color-night);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--color-night);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.button-stake {
+  background: var(--color-stake);
+}
+
+.button-alarm {
+  background: var(--color-alarm);
+  color: #fff;
+}
+
+.button-quiet {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.button-quiet:hover:not(:disabled) {
+  box-shadow: none;
+}
+
+/* A game in a list: a ticket with a torn stub on the left for the stake. */
+.ticket {
+  display: grid;
+  grid-template-columns: minmax(8.5rem, auto) 1fr;
+  background: var(--color-sheet);
+  border: 2px solid var(--color-night);
+  border-radius: 14px;
+}
+
+.ticket-stub {
+  padding: 1rem 1.25rem;
+  border-right: 2px dashed var(--color-night);
+}
+
+.ticket-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  padding: 1rem 1.25rem;
+}
+
+@media (max-width: 540px) {
+  .ticket {
+    grid-template-columns: 1fr;
+  }
+  .ticket-stub {
+    border-right: 0;
+    border-bottom: 2px dashed var(--color-night);
+  }
+}
+
+dialog.sheet {
+  width: min(34rem, calc(100vw - 2rem));
+  margin: auto;
+  padding: 1.75rem;
+  border: 2px solid var(--color-night);
+  border-radius: 18px;
+  background: var(--color-sheet);
+  color: var(--color-night);
+  box-shadow: 0 8px 0 var(--color-night);
+}
+
+dialog.sheet::backdrop {
+  background: rgb(18 18 43 / 0.55);
+}
+
+/* The one orchestrated moment: both hands pump three times before the result shows. */
+@keyframes throw-left {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  50% {
+    transform: translateY(-18px) rotate(-8deg);
+  }
+}
+
+@keyframes throw-right {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  50% {
+    transform: translateY(-18px) rotate(8deg);
+  }
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.throw-left {
+  animation: throw-left 0.36s ease-in-out 3;
+}
+
+.throw-right {
+  animation: throw-right 0.36s ease-in-out 3;
+}
+
+.after-throw {
+  animation: settle 0.3s ease-out 1.1s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .throw-left,
+  .throw-right,
+  .after-throw {
+    animation: none;
+  }
+  .button {
+    transition: none;
+  }
+}
+
+/* The wallet adapter ships its own button; bring it into the print palette. */
+.wallet-adapter-button.wallet-adapter-button-trigger {
+  height: 2.75rem;
+  padding: 0 1.15rem;
+  border: 2px solid var(--color-night);
+  border-radius: 999px;
+  background: var(--color-sheet);
+  color: var(--color-night);
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 1rem;
+  box-shadow: 0 3px 0 var(--color-night);
+}
+
+.wallet-adapter-button.wallet-adapter-button-trigger:not([disabled]):hover {
+  background: var(--color-stake);
 }
