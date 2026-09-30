@@ -1,0 +1,211 @@
+#![allow(dead_code, unused_imports)]
+
+use {
+    anchor_lang::{
+        prelude::{Clock, Pubkey},
+        solana_program::{bpf_loader_upgradeable, instruction::Instruction, system_program},
+        AccountDeserialize, InstructionData, ToAccountMetas,
+    },
+    litesvm::{
+        types::{FailedTransactionMetadata, TransactionMetadata},
+        LiteSVM,
+    },
+    rps::{
+        constants::{CONFIG_SEED, GAME_SEED},
+        errors::RpsError,
+        instructions::{ConfigParams, UpdateConfigParams},
+        state::{Config, Game},
+    },
+    sha2::{Digest, Sha256},
+    solana_account::Account,
+    solana_keypair::Keypair,
+    solana_message::{Message, VersionedMessage},
+    solana_signer::Signer,
+    solana_transaction::versioned::VersionedTransaction,
+};
+
+pub const SOL: u64 = 1_000_000_000;
+pub const DEFAULT_FEE_BPS: u16 = 250;
+pub const DEFAULT_MIN_STAKE: u64 = 10_000_000;
+pub const DEFAULT_TIMEOUT: i64 = 600;
+
+pub type TxResult = Result<TransactionMetadata, FailedTransactionMetadata>;
+
+pub struct Env {
+    pub svm: LiteSVM,
+    pub payer: Keypair,
+    pub treasury: Pubkey,
+}
+
+pub fn config_address() -> Pubkey {
+    Pubkey::find_program_address(&[CONFIG_SEED], &rps::ID).0
+}
+
+pub fn program_data_address() -> Pubkey {
+    Pubkey::find_program_address(&[rps::ID.as_ref()], &bpf_loader_upgradeable::ID).0
+}
+
+pub fn game_address(creator: &Pubkey, game_id: u64) -> Pubkey {
+    Pubkey::find_program_address(
+        &[GAME_SEED, creator.as_ref(), &game_id.to_le_bytes()],
+        &rps::ID,
+    )
+    .0
+}
+
+/// Gives `address` exactly `lamports` as a plain system-owned wallet.
+pub fn fund(env: &mut Env, address: &Pubkey, lamports: u64) {
+    env.svm
+        .set_account(
+            *address,
+            Account {
+                lamports,
+                data: vec![],
+                owner: system_program::ID,
+                executable: false,
+                rent_epoch: 0,
+            },
+        )
+        .unwrap();
+}
+
+pub fn funded(env: &mut Env, lamports: u64) -> Keypair {
+    let keypair = Keypair::new();
+    fund(env, &keypair.pubkey(), lamports);
+    keypair
+}
+
+pub fn balance(env: &Env, address: &Pubkey) -> u64 {
+    env.svm.get_balance(address).unwrap_or(0)
+}
+
+/// LiteSVM creates the ProgramData account with no upgrade authority. Its
+/// header is: enum tag (0..4), slot (4..12), Option tag (12), authority (13..45).
+fn set_upgrade_authority(svm: &mut LiteSVM, authority: &Pubkey) {
+    let address = program_data_address();
+    let mut account = svm
+        .get_account(&address)
+        .expect("LiteSVM should create a ProgramData account for the program");
+    account.data[12] = 1;
+    account.data[13..45].copy_from_slice(authority.as_ref());
+    svm.set_account(address, account).unwrap();
+}
+
+/// Program loaded, fee payer funded, `admin` set as upgrade authority. No config yet.
+pub fn boot() -> (Env, Keypair) {
+    let mut svm = LiteSVM::new();
+    let bytes = include_bytes!(concat!(env!("CARGO_TARGET_TMPDIR"), "/../deploy/rps.so"));
+    svm.add_program(rps::ID, bytes).unwrap();
+
+    let mut env = Env {
+        svm,
+        payer: Keypair::new(),
+        treasury: Pubkey::new_unique(),
+    };
+    let payer = env.payer.pubkey();
+    fund(&mut env, &payer, 1_000 * SOL);
+    let admin = funded(&mut env, 10 * SOL);
+    set_upgrade_authority(&mut env.svm, &admin.pubkey());
+    (env, admin)
+}
+
+pub fn default_params(treasury: Pubkey) -> ConfigParams {
+    ConfigParams {
+        treasury,
+        fee_bps: DEFAULT_FEE_BPS,
+        min_stake: DEFAULT_MIN_STAKE,
+        reveal_timeout: DEFAULT_TIMEOUT,
+    }
+}
+
+/// `boot` plus an initialized config with defaults and a treasury holding 1 SOL.
+pub fn setup() -> (Env, Keypair) {
+    let (mut env, admin) = boot();
+    let treasury = env.treasury;
+    fund(&mut env, &treasury, SOL);
+    send(
+        &mut env,
+        ix_initialize_config(&admin.pubkey(), default_params(treasury)),
+        &[&admin],
+    )
+    .unwrap();
+    (env, admin)
+}
+
+/// Every transaction is paid for by `env.payer`, so player balances change
+/// only through the game. The blockhash is expired first so two identical
+/// instructions are two distinct transactions.
+pub fn send(env: &mut Env, ix: Instruction, signers: &[&Keypair]) -> TxResult {
+    env.svm.expire_blockhash();
+    let blockhash = env.svm.latest_blockhash();
+    let message = Message::new_with_blockhash(&[ix], Some(&env.payer.pubkey()), &blockhash);
+    let mut all: Vec<&Keypair> = vec![&env.payer];
+    all.extend_from_slice(signers);
+    let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(message), &all).unwrap();
+    env.svm.send_transaction(tx)
+}
+
+pub fn assert_rps_err(result: TxResult, expected: RpsError) {
+    let code: u32 = expected.into();
+    let failed = result.expect_err("transaction should have failed");
+    let shown = format!("{:?}", failed.err);
+    assert!(
+        shown.contains(&format!("Custom({code})")),
+        "expected Custom({code}), got {shown}\n{}",
+        failed.meta.pretty_logs()
+    );
+}
+
+pub fn read_config(env: &Env) -> Config {
+    let account = env.svm.get_account(&config_address()).unwrap();
+    Config::try_deserialize(&mut account.data.as_slice()).unwrap()
+}
+
+pub fn no_update() -> UpdateConfigParams {
+    UpdateConfigParams {
+        admin: None,
+        treasury: None,
+        fee_bps: None,
+        min_stake: None,
+        reveal_timeout: None,
+    }
+}
+
+pub fn ix_initialize_config(authority: &Pubkey, params: ConfigParams) -> Instruction {
+    Instruction::new_with_bytes(
+        rps::ID,
+        &rps::instruction::InitializeConfig { params }.data(),
+        rps::accounts::InitializeConfig {
+            authority: *authority,
+            config: config_address(),
+            program: rps::ID,
+            program_data: program_data_address(),
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+pub fn ix_update_config(admin: &Pubkey, params: UpdateConfigParams) -> Instruction {
+    Instruction::new_with_bytes(
+        rps::ID,
+        &rps::instruction::UpdateConfig { params }.data(),
+        rps::accounts::AdminOnly {
+            admin: *admin,
+            config: config_address(),
+        }
+        .to_account_metas(None),
+    )
+}
+
+pub fn ix_set_paused(admin: &Pubkey, paused: bool) -> Instruction {
+    Instruction::new_with_bytes(
+        rps::ID,
+        &rps::instruction::SetPaused { paused }.data(),
+        rps::accounts::AdminOnly {
+            admin: *admin,
+            config: config_address(),
+        }
+        .to_account_metas(None),
+    )
+}

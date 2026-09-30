@@ -1,13 +1,13 @@
-pub mod constants;
-pub mod error;
-pub mod instructions;
-pub mod state;
-
 use anchor_lang::prelude::*;
 
-pub use constants::*;
-pub use instructions::*;
-pub use state::*;
+pub mod constants;
+pub mod errors;
+pub mod events;
+pub mod instructions;
+pub mod logic;
+pub mod state;
+
+use instructions::*;
 
 declare_id!("Fmi151zsEHFgRJeUXNgDjbo4aLA6PRQ63ktWM6sCEgkA");
 
@@ -15,11 +15,16 @@ declare_id!("Fmi151zsEHFgRJeUXNgDjbo4aLA6PRQ63ktWM6sCEgkA");
 pub mod rps {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        crate::instructions::initialize::handle_initialize(ctx)
+    pub fn initialize_config(ctx: Context<InitializeConfig>, params: ConfigParams) -> Result<()> {
+        let bump = ctx.bumps.config;
+        ctx.accounts.handle(params, bump)
     }
 
-    pub fn increment(ctx: Context<Increment>) -> Result<()> {
-        crate::instructions::increment::handle_increment(ctx)
+    pub fn update_config(ctx: Context<AdminOnly>, params: UpdateConfigParams) -> Result<()> {
+        ctx.accounts.update_config(params)
+    }
+
+    pub fn set_paused(ctx: Context<AdminOnly>, paused: bool) -> Result<()> {
+        ctx.accounts.set_paused(paused)
     }
 }

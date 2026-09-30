@@ -1,0 +1,52 @@
+use anchor_lang::prelude::*;
+
+use crate::{constants::CONFIG_SEED, errors::RpsError, state::Config};
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct UpdateConfigParams {
+    pub admin: Option<Pubkey>,
+    pub treasury: Option<Pubkey>,
+    pub fee_bps: Option<u16>,
+    pub min_stake: Option<u64>,
+    pub reveal_timeout: Option<i64>,
+}
+
+/// Neither admin instruction takes a game account, so the admin has no path
+/// to player funds.
+#[derive(Accounts)]
+pub struct AdminOnly<'info> {
+    pub admin: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [CONFIG_SEED],
+        bump = config.bump,
+        has_one = admin @ RpsError::Unauthorized
+    )]
+    pub config: Account<'info, Config>,
+}
+
+impl<'info> AdminOnly<'info> {
+    pub fn update_config(&mut self, params: UpdateConfigParams) -> Result<()> {
+        let config = &mut self.config;
+        let treasury = params.treasury.unwrap_or(config.treasury);
+        let fee_bps = params.fee_bps.unwrap_or(config.fee_bps);
+        let min_stake = params.min_stake.unwrap_or(config.min_stake);
+        let reveal_timeout = params.reveal_timeout.unwrap_or(config.reveal_timeout);
+        Config::validate(&treasury, fee_bps, min_stake, reveal_timeout)?;
+
+        if let Some(admin) = params.admin {
+            require_keys_neq!(admin, Pubkey::default(), RpsError::Unauthorized);
+            config.admin = admin;
+        }
+        config.treasury = treasury;
+        config.fee_bps = fee_bps;
+        config.min_stake = min_stake;
+        config.reveal_timeout = reveal_timeout;
+        Ok(())
+    }
+
+    pub fn set_paused(&mut self, paused: bool) -> Result<()> {
+        self.config.paused = paused;
+        Ok(())
+    }
+}
