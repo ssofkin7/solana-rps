@@ -4,7 +4,7 @@ use crate::{
     constants::GAME_SEED,
     errors::RpsError,
     events::GameSettled,
-    logic::{commitment_hash, compute_fee, is_valid_move, outcome},
+    logic::{commitment_hash, is_valid_move, outcome},
     state::{Game, GameStatus, Outcome},
 };
 
@@ -51,11 +51,15 @@ impl<'info> Reveal<'info> {
         let (creator_payout, opponent_payout, fee) = match result {
             Outcome::Tie => (stake, stake, 0),
             Outcome::CreatorWins => {
-                let fee = self.payable_fee(pot)?;
+                let fee = self
+                    .game
+                    .payable_fee(pot, &self.treasury.to_account_info())?;
                 (pot.checked_sub(fee).ok_or(RpsError::MathOverflow)?, 0, fee)
             }
             Outcome::OpponentWins => {
-                let fee = self.payable_fee(pot)?;
+                let fee = self
+                    .game
+                    .payable_fee(pot, &self.treasury.to_account_info())?;
                 (0, pot.checked_sub(fee).ok_or(RpsError::MathOverflow)?, fee)
             }
         };
@@ -86,26 +90,5 @@ impl<'info> Reveal<'info> {
             fee,
         });
         Ok(())
-    }
-
-    /// The fee, or zero when paying it would leave the treasury below the
-    /// rent-exempt minimum. Without this an empty treasury would make small
-    /// reveals fail and push creators into forfeit.
-    fn payable_fee(&self, pot: u64) -> Result<u64> {
-        let fee = compute_fee(pot, self.game.fee_bps)?;
-        if fee == 0 {
-            return Ok(0);
-        }
-        let treasury = self.treasury.to_account_info();
-        let rent_minimum = Rent::get()?.minimum_balance(treasury.data_len());
-        let balance_after = treasury
-            .lamports()
-            .checked_add(fee)
-            .ok_or(RpsError::MathOverflow)?;
-        if balance_after < rent_minimum {
-            Ok(0)
-        } else {
-            Ok(fee)
-        }
     }
 }

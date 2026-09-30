@@ -46,4 +46,6 @@ pub struct GameForfeited {
     pub creator: Pubkey,
     pub opponent: Pubkey,
     pub pot: u64,
+    pub payout: u64,
+    pub fee: u64,
 }

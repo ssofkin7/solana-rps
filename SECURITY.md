@@ -19,7 +19,7 @@ without an independent audit.
 | A player copies another creator's commitment into their own game | The commitment is `sha256(move \|\| salt \|\| creator_pubkey)`. A copied commitment can never be revealed by a different creator. |
 | The opponent guesses the creator's move from the commitment | The salt is 32 random bytes generated in the browser, so the three possible moves cannot be brute-forced. |
 | The creator changes their move after seeing the opponent's | `reveal` recomputes the hash and rejects any move or salt that does not match. |
-| The creator refuses to reveal a losing move | After the reveal timeout the opponent claims the whole pot with `claim_forfeit`. |
+| The creator refuses to reveal a losing move | After the reveal timeout the opponent claims the pot, minus the normal fee, with `claim_forfeit`. |
 | Replaying an action: double join, double reveal, cancel after join, cancel or forfeit after settlement | Every instruction checks the game status, and every settlement closes the game account in the same instruction, so a second action finds no account. |
 | Passing a fake account: another wallet as opponent, treasury, or creator | `has_one` constraints pin each account to the key stored in the game. The game and config are PDAs checked by seeds and bump. |
 | A forged game or config account | Anchor checks the owner program and the 8-byte discriminator on every typed account. |
@@ -81,15 +81,17 @@ without an independent audit.
 - Status is `Open`. Closing the account returns the stake and rent together.
 
 ### claim_forfeit
-- `opponent` signs; `game` is a PDA with `has_one` on opponent and creator.
+- `opponent` signs; `game` is a PDA with `has_one` on opponent, creator, and treasury.
 - Status is `Joined`; the clock is at or past `joined_at + reveal_timeout`.
-- The whole pot goes to the opponent, with no fee. Rent returns to the creator.
+- The opponent receives the pot minus the same fee any winner pays, so a creator
+  who has lost cannot starve the treasury by refusing to reveal. Rent returns to
+  the creator.
 
 ## Code rules
 
 - No `unwrap`, `expect`, or `panic!` in program code outside unit tests.
 - All arithmetic uses `checked_*` operations.
-- 70 tests cover every instruction, including all nine move combinations,
+- 72 tests cover every instruction, including all nine move combinations,
   wrong salt and move, every out-of-order action, non-player attempts, the
   paused state, fee rounding, and rent return. Run them with `cargo test -p rps`.
 
@@ -99,9 +101,6 @@ without an independent audit.
   the creator has the reveal timeout (10 minutes by default) to reveal. A
   creator who leaves a game open and walks away can lose the stake by forfeit
   even with the winning move. Cancel a game before leaving it unattended.
-- **A forfeit pays no fee.** A creator who has lost gains nothing by stalling,
-  but the opponent then waits out the timeout and the buyback wallet earns
-  nothing from that game.
 - **Terms are fixed when the game is created.** The fee and timeout a creator
   gets are whatever the config holds when their transaction lands. The fee can
   never exceed 10% and the timeout can never be under 60 seconds.

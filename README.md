@@ -26,7 +26,7 @@ winner pays a small fee that goes to a buyback wallet.
    hash and pays out: the winner takes the pot minus the fee, a tie refunds both.
 4. **If something goes wrong.** The creator can cancel any time before a join.
    If the creator does not reveal within the timeout, the opponent claims the
-   whole pot.
+   pot, minus the same fee.
 
 ## Requirements
 

@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::{constants::*, errors::RpsError};
+use crate::{constants::*, errors::RpsError, logic::compute_fee};
 
 #[derive(AnchorSerialize, AnchorDeserialize, InitSpace, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GameStatus {
@@ -63,4 +63,26 @@ pub struct Game {
     pub treasury: Pubkey,
     pub reveal_timeout: i64,
     pub bump: u8,
+}
+
+impl Game {
+    /// The fee owed on `pot`, or zero when paying it would leave the treasury
+    /// below the rent-exempt minimum. Without the waiver an empty treasury
+    /// would make small settlements fail outright.
+    pub fn payable_fee(&self, pot: u64, treasury: &AccountInfo) -> Result<u64> {
+        let fee = compute_fee(pot, self.fee_bps)?;
+        if fee == 0 {
+            return Ok(0);
+        }
+        let rent_minimum = Rent::get()?.minimum_balance(treasury.data_len());
+        let balance_after = treasury
+            .lamports()
+            .checked_add(fee)
+            .ok_or(RpsError::MathOverflow)?;
+        if balance_after < rent_minimum {
+            Ok(0)
+        } else {
+            Ok(fee)
+        }
+    }
 }
