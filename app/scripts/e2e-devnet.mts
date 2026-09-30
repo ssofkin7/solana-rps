@@ -19,7 +19,9 @@ import { PROGRAM_ID, RPC_URL, explorerTx } from "../src/lib/config";
 import {
   cancelGame,
   createGame,
+  fetchAllStats,
   fetchConfig,
+  fetchRecentResults,
   fetchGame,
   fetchHistory,
   fetchMyGames,
@@ -32,6 +34,7 @@ import {
   revealGame,
 } from "../src/lib/rps";
 import { actionsFor } from "../src/lib/status";
+import { rankPlayers } from "../src/lib/leaderboard";
 
 if (!RPC_URL.includes("devnet")) {
   throw new Error(`Refusing to run against ${RPC_URL}: this script is devnet only.`);
@@ -125,6 +128,24 @@ console.log("history ", history.map((entry) => entry.label).join(" > "));
 assert.deepEqual(
   history.map((entry) => entry.label),
   ["Created", "Joined", "Revealed"],
+);
+
+const allStats = await fetchAllStats(asOpponent);
+const winnerStats = allStats.find((s) => s.player === opponent.publicKey.toBase58());
+const loserStats = allStats.find((s) => s.player === creator.publicKey.toBase58());
+assert.ok(winnerStats && loserStats, "both players should have stats");
+assert.deepEqual(
+  [winnerStats.games, winnerStats.wins, winnerStats.received, winnerStats.feesPaid],
+  [1, 1, STAKE * BigInt(2) - fee, fee],
+);
+assert.deepEqual([loserStats.games, loserStats.losses, loserStats.received], [1, 1, BigInt(0)]);
+const ranked = rankPlayers(allStats);
+console.log("ranking ", `${ranked.length} players; winner is #${ranked.find((p) => p.player === winnerStats.player)?.rank}`);
+
+const recent = await fetchRecentResults(asOpponent, 3);
+assert.ok(
+  recent.some((entry) => entry.signature === revealSignature),
+  "the game should appear in recent results",
 );
 
 // Game 2: created, then cancelled.

@@ -16,6 +16,7 @@ const LINKS = [
   { href: "/", label: "Lobby" },
   { href: "/create", label: "Create game" },
   { href: "/games", label: "My games" },
+  { href: "/leaderboard", label: "Leaderboard" },
 ];
 
 export function SiteHeader() {

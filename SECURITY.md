@@ -34,6 +34,8 @@ without an independent audit.
 | Dust stakes that cannot be refunded into an empty wallet | `min_stake` cannot be configured below 1,000,000 lamports. |
 | Arithmetic overflow with unbounded stakes | All arithmetic is checked. The fee is computed in u128. The release profile also enables overflow checks. |
 | The opponent wagers a different amount than they were shown | `join_game` takes `expected_stake` and fails unless it equals the game's stake. |
+| A player credits a result to someone else's stats, or edits their own | Stats accounts are PDAs at `["stats", player]`. Settlement derives both from the players stored in the game, and only the program can write them. |
+| A game created before stats existed can no longer be settled | `reveal` and `claim_forfeit` create a missing stats account on the spot (`init_if_needed`), paid by whoever is settling. Stats accounts are never closed, so they cannot be re-initialised. |
 
 ## Checks by instruction
 
@@ -60,6 +62,8 @@ without an independent audit.
   overwrite an open game.
 - Stake is at least `min_stake`; the creator is not the treasury.
 - The stake moves in through a system-program transfer signed by the creator.
+- `creator_stats` is the `["stats", creator]` PDA, created on the first game at
+  the creator's cost.
 
 ### join_game
 - `opponent` signs.
@@ -69,11 +73,15 @@ without an independent audit.
   `expected_commitment` equals the game's commitment.
 - The stake moves in through a system-program transfer signed by the opponent,
   and the instruction fails as a whole if that transfer fails.
+- `opponent_stats` is the `["stats", opponent]` PDA, created on the first game
+  at the opponent's cost.
 
 ### reveal
 - `creator` signs; `game` is a PDA with `has_one` on creator, opponent, and treasury.
 - Status is `Joined`; the move is 0, 1, or 2; the hash matches the commitment.
 - Payouts are computed with checked arithmetic and come out of the game account.
+- Both stats accounts are the PDAs of the players stored in the game, and are
+  updated with checked arithmetic.
 - The game account is closed and its rent returns to the creator.
 
 ### cancel_game
@@ -86,12 +94,13 @@ without an independent audit.
 - The opponent receives the pot minus the same fee any winner pays, so a creator
   who has lost cannot starve the treasury by refusing to reveal. Rent returns to
   the creator.
+- The opponent's stats record a win and the creator's record a loss and a forfeit.
 
 ## Code rules
 
 - No `unwrap`, `expect`, or `panic!` in program code outside unit tests.
 - All arithmetic uses `checked_*` operations.
-- 72 tests cover every instruction, including all nine move combinations,
+- 81 tests cover every instruction, including all nine move combinations,
   wrong salt and move, every out-of-order action, non-player attempts, the
   paused state, fee rounding, and rent return. Run them with `cargo test -p rps`.
 

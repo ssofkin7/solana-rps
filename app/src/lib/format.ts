@@ -45,3 +45,10 @@ export function formatDuration(seconds: number): string {
   if (seconds >= 60 && seconds % 60 === 0) return plural(seconds / 60, "minute");
   return plural(seconds, "second");
 }
+
+/** A signed SOL amount for gains and losses, such as "+0.0095" or "-0.01". */
+export function formatNet(lamports: bigint): string {
+  if (lamports > 0n) return `+${formatSol(lamports)}`;
+  if (lamports < 0n) return `-${formatSol(-lamports)}`;
+  return "0";
+}

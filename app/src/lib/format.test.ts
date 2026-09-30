@@ -3,6 +3,7 @@ import {
   formatAge,
   formatCountdown,
   formatDuration,
+  formatNet,
   formatSol,
   parseSol,
   shortAddress,
@@ -69,5 +70,13 @@ describe("formatDuration", () => {
     expect(formatDuration(7_200)).toBe("2 hours");
     expect(formatDuration(90)).toBe("90 seconds");
     expect(formatDuration(1)).toBe("1 second");
+  });
+});
+
+describe("formatNet", () => {
+  it("signs gains and losses", () => {
+    expect(formatNet(9_500_000n)).toBe("+0.0095");
+    expect(formatNet(-10_000_000n)).toBe("-0.01");
+    expect(formatNet(0n)).toBe("0");
   });
 });

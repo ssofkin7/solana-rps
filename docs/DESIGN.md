@@ -276,3 +276,20 @@ All must pass before the work is called finished.
 4. Frontend.
 5. README with setup, architecture diagram, how to play, and how to run tests; SECURITY.md.
 6. Create the public GitHub repo and push.
+
+## 10. Player stats and leaderboard
+
+Added after the first release.
+
+- **Account.** `PlayerStats`, PDA seeds `["stats", player]`: games, wins, losses,
+  ties, forfeits (games lost by not revealing), staked, received, fees paid. One
+  per player, never closed.
+- **Creation.** `create_game` and `join_game` create the signer's stats account
+  on their first game (`init_if_needed`), at their cost of about 0.0016 SOL.
+- **Updates.** `reveal` and `claim_forfeit` update both players. They also create
+  a missing stats account, paid by whoever settles, so a game created before this
+  change can always be settled.
+- **Not counted.** Cancelled games.
+- **Frontend.** A Leaderboard page ranks players by net SOL (received minus
+  staked), then wins, then fewest games. It also lists recent games, read from
+  transaction history through a server route cached for one minute.

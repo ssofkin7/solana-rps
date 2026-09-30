@@ -40,12 +40,25 @@ Two things can end a game early:
   opponent can claim the pot, minus the same fee. So if you create a game and
   need to leave, cancel it first.
 
+## Leaderboard
+
+Every player has a stats account on-chain, created on their first game and paid
+for by them (about 0.0016 SOL, once). The program updates both players' stats at
+every reveal and forfeit: games, wins, losses, ties, forfeits, total staked,
+total received, and fees paid. Cancelled games are not counted. Because the
+program writes these itself, nobody can edit the rankings.
+
+The Leaderboard page ranks players by net SOL won (received minus staked) and
+lists recent games. Recent games are read from transaction history through a
+server route that caches the scan for a minute, because the public devnet RPC
+limits transaction lookups.
+
 ## Architecture
 
 ```mermaid
 flowchart LR
   subgraph Browser
-    UI[Next.js pages<br/>lobby, create, my games, result]
+    UI[Next.js pages<br/>lobby, create, my games,<br/>leaderboard, result]
     LIB[app/src/lib<br/>chain client, commitment,<br/>salt backup, action rules]
     LS[(localStorage<br/>move and salt per game)]
     UI --> LIB
@@ -56,6 +69,7 @@ flowchart LR
   subgraph Program[rps program]
     CFG[(Config PDA<br/>admin, treasury, fee,<br/>min stake, timeout, paused)]
     G[(Game PDA<br/>holds both stakes)]
+    S[(PlayerStats PDA<br/>one per player)]
   end
   T[Buyback wallet]
 
@@ -64,6 +78,7 @@ flowchart LR
   LIB -- read games and events --> RPC
   RPC --> Program
   G -- fee --> T
+  G -. result recorded .-> S
   CFG -. terms copied at creation .-> G
 ```
 
@@ -131,8 +146,8 @@ default. To point it somewhere else, copy `app/.env.example` to
 
 | What | Command | Notes |
 |---|---|---|
-| Program, 72 tests | `cargo test -p rps` | Runs against LiteSVM, no validator needed. Build first: the tests load `target/deploy/rps.so`. |
-| Frontend logic, 50 tests | `cd app && pnpm test` | Commitment hash, salt backup, error messages, which actions are valid, formatting. |
+| Program, 81 tests | `cargo test -p rps` | Runs against LiteSVM, no validator needed. Build first: the tests load `target/deploy/rps.so`. |
+| Frontend logic, 58 tests | `cd app && pnpm test` | Commitment hash, salt backup, error messages, which actions are valid, leaderboard ranking, formatting. |
 | Chain client on devnet | `cd app && pnpm e2e-devnet` | Plays a full game and a cancelled game through the same code the browser uses. |
 | Deployed program | `pnpm smoke-devnet` | Plays one game from the repo root and checks the exact payouts. |
 

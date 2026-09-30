@@ -13,6 +13,7 @@ import { Buffer } from "buffer";
 import idl from "../idl/rps.json";
 import type { Rps } from "../idl/rps";
 import { commitmentFor } from "./commitment";
+import type { PlayerStatsView } from "./leaderboard";
 import { isMove, type Move, type Outcome } from "./moves";
 import { fromHex, newSalt, type Secret, toHex } from "./salt";
 import type { GameView } from "./status";
@@ -74,6 +75,11 @@ export function programFor(provider: Provider, programId: PublicKey): RpsProgram
 
 export function configAddress(programId: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync([Buffer.from("config")], programId)[0];
+}
+
+/** Each player's lifetime stats account, created on their first game. */
+export function statsAddress(programId: PublicKey, player: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync([Buffer.from("stats"), player.toBuffer()], programId)[0];
 }
 
 export function gameAddress(programId: PublicKey, creator: PublicKey, gameId: bigint): PublicKey {
@@ -188,6 +194,7 @@ export async function createGame(
       creator,
       config: configAddress(program.programId),
       game: new PublicKey(secret.game),
+      creatorStats: statsAddress(program.programId, creator),
       systemProgram: SystemProgram.programId,
     })
     .rpc();
@@ -209,6 +216,7 @@ export async function joinGame(
       opponent,
       config: configAddress(program.programId),
       game: new PublicKey(game.address),
+      opponentStats: statsAddress(program.programId, opponent),
       systemProgram: SystemProgram.programId,
     })
     .rpc();
@@ -229,6 +237,7 @@ export async function revealGame(
       game: new PublicKey(game.address),
       opponent: new PublicKey(game.opponent),
       treasury: new PublicKey(game.treasury),
+      ...statsAccountsFor(program.programId, game.creator, game.opponent),
     })
     .rpc();
 }
@@ -260,8 +269,86 @@ export async function claimForfeit(
       game: new PublicKey(game.address),
       creator: new PublicKey(game.creator),
       treasury: new PublicKey(game.treasury),
+      ...statsAccountsFor(program.programId, game.creator, game.opponent),
     })
     .rpc();
+}
+
+function statsAccountsFor(programId: PublicKey, creator: string, opponent: string) {
+  return {
+    creatorStats: statsAddress(programId, new PublicKey(creator)),
+    opponentStats: statsAddress(programId, new PublicKey(opponent)),
+    systemProgram: SystemProgram.programId,
+  };
+}
+
+/** Every player stats account on the program. */
+export async function fetchAllStats(program: RpsProgram): Promise<PlayerStatsView[]> {
+  const accounts = await program.account.playerStats.all();
+  return accounts.map(({ account }) => ({
+    player: account.player.toBase58(),
+    games: account.games.toNumber(),
+    wins: account.wins.toNumber(),
+    losses: account.losses.toNumber(),
+    ties: account.ties.toNumber(),
+    forfeits: account.forfeits.toNumber(),
+    staked: toBigInt(account.staked),
+    received: toBigInt(account.received),
+    feesPaid: toBigInt(account.feesPaid),
+  }));
+}
+
+export type RecentResult = {
+  signature: string;
+  /** Unix seconds, when the cluster reports it. */
+  blockTime: number | null;
+  result: GameResult;
+};
+
+/**
+ * The most recently finished games, newest first, read from the program's
+ * transaction history. Cancelled games are left out.
+ */
+export async function fetchRecentResults(
+  program: RpsProgram,
+  limit: number,
+): Promise<RecentResult[]> {
+  const connection = program.provider.connection;
+  const signatures = (
+    await connection.getSignaturesForAddress(program.programId, { limit: SCAN_LIMIT }, "confirmed")
+  ).filter((info) => !info.err);
+
+  // One transaction at a time with backoff: the public devnet endpoint limits
+  // transaction lookups hard. Stop as soon as there are enough results.
+  const results: RecentResult[] = [];
+  for (const info of signatures) {
+    if (results.length >= limit) break;
+    const tx = await withRetry(() =>
+      connection.getTransaction(info.signature, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      }),
+    );
+    if (!tx) continue;
+    const result = resultFrom(eventsFromLogs(program, tx.meta?.logMessages ?? []));
+    if (result && result.kind !== "cancelled") {
+      results.push({ signature: info.signature, blockTime: tx.blockTime ?? null, result });
+    }
+  }
+  return results;
+}
+
+const SCAN_LIMIT = 40;
+
+async function withRetry<T>(action: () => Promise<T>, attempts = 6): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await action();
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
+    }
+  }
 }
 
 type ParsedEvent = { name: string; data: Record<string, unknown> };
@@ -276,8 +363,16 @@ async function eventsIn(
     maxSupportedTransactionVersion: 0,
   });
   if (!tx) return null;
+  return {
+    events: eventsFromLogs(program, tx.meta?.logMessages ?? []),
+    blockTime: tx.blockTime ?? null,
+    failed: tx.meta?.err != null,
+  };
+}
+
+function eventsFromLogs(program: RpsProgram, logs: string[]): ParsedEvent[] {
   const events: ParsedEvent[] = [];
-  for (const line of tx.meta?.logMessages ?? []) {
+  for (const line of logs) {
     const encoded = /^Program data: (.+)$/.exec(line)?.[1];
     if (!encoded) continue;
     const decoded = program.coder.events.decode(encoded);
@@ -288,7 +383,7 @@ async function eventsIn(
       });
     }
   }
-  return { events, blockTime: tx.blockTime ?? null, failed: tx.meta?.err != null };
+  return events;
 }
 
 function key(value: unknown): string {
