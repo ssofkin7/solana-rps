@@ -11,3 +11,5 @@ test-ledger/
 .env.*
 !.env.example
 .DS_Store
+# Tool guidance files that the Next.js dev server regenerates
+app/*.md

@@ -1,0 +1,1094 @@
+{
+  "address": "Fmi151zsEHFgRJeUXNgDjbo4aLA6PRQ63ktWM6sCEgkA",
+  "metadata": {
+    "name": "rps",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Commit-reveal Rock-Paper-Scissors with SOL wagers"
+  },
+  "instructions": [
+    {
+      "name": "cancel_game",
+      "discriminator": [
+        121,
+        194,
+        154,
+        118,
+        103,
+        235,
+        149,
+        52
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "game"
+          ]
+        },
+        {
+          "name": "game",
+          "docs": [
+            "Closing the account returns the stake and the rent together."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.creator",
+                "account": "Game"
+              },
+              {
+                "kind": "account",
+                "path": "game.game_id",
+                "account": "Game"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "claim_forfeit",
+      "discriminator": [
+        42,
+        69,
+        137,
+        86,
+        190,
+        158,
+        173,
+        17
+      ],
+      "accounts": [
+        {
+          "name": "opponent",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "game"
+          ]
+        },
+        {
+          "name": "game",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.creator",
+                "account": "Game"
+              },
+              {
+                "kind": "account",
+                "path": "game.game_id",
+                "account": "Game"
+              }
+            ]
+          }
+        },
+        {
+          "name": "creator",
+          "writable": true,
+          "relations": [
+            "game"
+          ]
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "relations": [
+            "game"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_game",
+      "discriminator": [
+        124,
+        69,
+        75,
+        66,
+        184,
+        220,
+        72,
+        206
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "game",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              },
+              {
+                "kind": "arg",
+                "path": "game_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "game_id",
+          "type": "u64"
+        },
+        {
+          "name": "stake",
+          "type": "u64"
+        },
+        {
+          "name": "commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize_config",
+      "discriminator": [
+        208,
+        127,
+        21,
+        1,
+        194,
+        190,
+        196,
+        70
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "program",
+          "address": "Fmi151zsEHFgRJeUXNgDjbo4aLA6PRQ63ktWM6sCEgkA"
+        },
+        {
+          "name": "program_data",
+          "docs": [
+            "Only the program's upgrade authority may create the config, so nobody",
+            "can front-run initialization after a deploy."
+          ]
+        },
+        {
+          "name": "treasury",
+          "docs": [
+            "The fee wallet. It must be a system-owned account that can be",
+            "write-locked: `reveal` credits it, so an address that can never be",
+            "writable (a sysvar, a program id) would make every reveal fail."
+          ],
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "ConfigParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "join_game",
+      "discriminator": [
+        107,
+        112,
+        18,
+        38,
+        56,
+        173,
+        60,
+        128
+      ],
+      "accounts": [
+        {
+          "name": "opponent",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "game",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.creator",
+                "account": "Game"
+              },
+              {
+                "kind": "account",
+                "path": "game.game_id",
+                "account": "Game"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "mv",
+          "type": "u8"
+        },
+        {
+          "name": "expected_stake",
+          "type": "u64"
+        },
+        {
+          "name": "expected_commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "reveal",
+      "discriminator": [
+        9,
+        35,
+        59,
+        190,
+        167,
+        249,
+        76,
+        115
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "game"
+          ]
+        },
+        {
+          "name": "game",
+          "docs": [
+            "Payouts leave this account first; whatever remains is the rent, which",
+            "`close` returns to the creator."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.creator",
+                "account": "Game"
+              },
+              {
+                "kind": "account",
+                "path": "game.game_id",
+                "account": "Game"
+              }
+            ]
+          }
+        },
+        {
+          "name": "opponent",
+          "writable": true,
+          "relations": [
+            "game"
+          ]
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "relations": [
+            "game"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "mv",
+          "type": "u8"
+        },
+        {
+          "name": "salt",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_paused",
+      "discriminator": [
+        91,
+        60,
+        125,
+        192,
+        176,
+        225,
+        166,
+        218
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "paused",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "update_config",
+      "discriminator": [
+        29,
+        158,
+        252,
+        191,
+        10,
+        83,
+        219,
+        99
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "new_treasury",
+          "docs": [
+            "Pass this to change the fee wallet. It must be a system-owned account",
+            "that can be write-locked, for the same reason as in `initialize_config`."
+          ],
+          "writable": true,
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "UpdateConfigParams"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Config",
+      "discriminator": [
+        155,
+        12,
+        170,
+        224,
+        30,
+        250,
+        204,
+        130
+      ]
+    },
+    {
+      "name": "Game",
+      "discriminator": [
+        27,
+        90,
+        166,
+        125,
+        74,
+        100,
+        121,
+        18
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "GameCancelled",
+      "discriminator": [
+        113,
+        20,
+        200,
+        104,
+        76,
+        35,
+        9,
+        241
+      ]
+    },
+    {
+      "name": "GameCreated",
+      "discriminator": [
+        218,
+        25,
+        150,
+        94,
+        177,
+        112,
+        96,
+        2
+      ]
+    },
+    {
+      "name": "GameForfeited",
+      "discriminator": [
+        125,
+        11,
+        196,
+        100,
+        157,
+        9,
+        28,
+        65
+      ]
+    },
+    {
+      "name": "GameJoined",
+      "discriminator": [
+        111,
+        242,
+        51,
+        235,
+        66,
+        43,
+        140,
+        84
+      ]
+    },
+    {
+      "name": "GameSettled",
+      "discriminator": [
+        63,
+        109,
+        128,
+        85,
+        229,
+        63,
+        167,
+        176
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Paused",
+      "msg": "New games and joins are paused"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidMove",
+      "msg": "Move must be 0 (rock), 1 (paper) or 2 (scissors)"
+    },
+    {
+      "code": 6002,
+      "name": "StakeTooLow",
+      "msg": "Stake is below the minimum"
+    },
+    {
+      "code": 6003,
+      "name": "StakeMismatch",
+      "msg": "Stake does not match the game's stake"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidGameState",
+      "msg": "The game is not in the right state for this action"
+    },
+    {
+      "code": 6005,
+      "name": "CommitmentMismatch",
+      "msg": "Move and salt do not match the commitment"
+    },
+    {
+      "code": 6006,
+      "name": "CannotJoinOwnGame",
+      "msg": "You cannot join your own game"
+    },
+    {
+      "code": 6007,
+      "name": "RevealTimeoutNotReached",
+      "msg": "The reveal timeout has not passed yet"
+    },
+    {
+      "code": 6008,
+      "name": "Unauthorized",
+      "msg": "You are not allowed to do this"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidTreasury",
+      "msg": "Treasury account is invalid"
+    },
+    {
+      "code": 6010,
+      "name": "TreasuryCannotPlay",
+      "msg": "The treasury wallet cannot play"
+    },
+    {
+      "code": 6011,
+      "name": "FeeTooHigh",
+      "msg": "Fee is above the maximum of 1000 bps"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidTimeout",
+      "msg": "Reveal timeout must be between 60 and 86400 seconds"
+    },
+    {
+      "code": 6013,
+      "name": "MinStakeTooLow",
+      "msg": "Minimum stake is below the allowed floor"
+    },
+    {
+      "code": 6014,
+      "name": "MathOverflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6015,
+      "name": "GameChanged",
+      "msg": "The game changed since you loaded it. Refresh and try again"
+    }
+  ],
+  "types": [
+    {
+      "name": "Config",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "min_stake",
+            "type": "u64"
+          },
+          {
+            "name": "reveal_timeout",
+            "type": "i64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "min_stake",
+            "type": "u64"
+          },
+          {
+            "name": "reveal_timeout",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Game",
+      "docs": [
+        "Field order is part of the public interface: the frontend filters on",
+        "`status` at byte 8, `creator` at byte 9 and `opponent` at byte 41."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "GameStatus"
+              }
+            }
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "opponent",
+            "type": "pubkey"
+          },
+          {
+            "name": "game_id",
+            "type": "u64"
+          },
+          {
+            "name": "stake",
+            "type": "u64"
+          },
+          {
+            "name": "commitment",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "opponent_move",
+            "type": "u8"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "joined_at",
+            "type": "i64"
+          },
+          {
+            "name": "fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "reveal_timeout",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GameCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "game",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GameCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "game",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "game_id",
+            "type": "u64"
+          },
+          {
+            "name": "stake",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GameForfeited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "game",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "opponent",
+            "type": "pubkey"
+          },
+          {
+            "name": "pot",
+            "type": "u64"
+          },
+          {
+            "name": "payout",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GameJoined",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "game",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "opponent",
+            "type": "pubkey"
+          },
+          {
+            "name": "opponent_move",
+            "type": "u8"
+          },
+          {
+            "name": "reveal_deadline",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GameSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "game",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "opponent",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator_move",
+            "type": "u8"
+          },
+          {
+            "name": "opponent_move",
+            "type": "u8"
+          },
+          {
+            "name": "outcome",
+            "type": {
+              "defined": {
+                "name": "Outcome"
+              }
+            }
+          },
+          {
+            "name": "stake",
+            "type": "u64"
+          },
+          {
+            "name": "creator_payout",
+            "type": "u64"
+          },
+          {
+            "name": "opponent_payout",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GameStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Open"
+          },
+          {
+            "name": "Joined"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Outcome",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "CreatorWins"
+          },
+          {
+            "name": "OpponentWins"
+          },
+          {
+            "name": "Tie"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UpdateConfigParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "fee_bps",
+            "type": {
+              "option": "u16"
+            }
+          },
+          {
+            "name": "min_stake",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "reveal_timeout",
+            "type": {
+              "option": "i64"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
