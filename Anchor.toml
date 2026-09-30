@@ -1,0 +1,21 @@
+skip_local_validator = true
+
+[toolchain]
+anchor_version = "1.2.0"
+solana_version = "4.1.2"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+rps = "Fmi151zsEHFgRJeUXNgDjbo4aLA6PRQ63ktWM6sCEgkA"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "cargo test"
+
+[hooks]

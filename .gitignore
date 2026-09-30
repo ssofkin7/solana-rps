@@ -1,0 +1,13 @@
+target/
+.anchor/
+node_modules/
+test-ledger/
+.surfpool/
+.yarn/
+.local/
+**/*.rs.bk
+*-keypair.json
+.env
+.env.*
+!.env.example
+.DS_Store
