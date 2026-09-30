@@ -380,3 +380,16 @@ pub fn reveal(env: &mut Env, created: &Created, opponent: &Pubkey) -> TxResult {
         &[&created.creator],
     )
 }
+
+pub fn ix_claim_forfeit(opponent: &Pubkey, game: &Pubkey, creator: &Pubkey) -> Instruction {
+    Instruction::new_with_bytes(
+        rps::ID,
+        &rps::instruction::ClaimForfeit {}.data(),
+        rps::accounts::ClaimForfeit {
+            opponent: *opponent,
+            game: *game,
+            creator: *creator,
+        }
+        .to_account_metas(None),
+    )
+}

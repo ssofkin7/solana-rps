@@ -49,4 +49,8 @@ pub mod rps {
     pub fn reveal(ctx: Context<Reveal>, mv: u8, salt: [u8; 32]) -> Result<()> {
         ctx.accounts.handle(mv, salt)
     }
+
+    pub fn claim_forfeit(ctx: Context<ClaimForfeit>) -> Result<()> {
+        ctx.accounts.handle()
+    }
 }
